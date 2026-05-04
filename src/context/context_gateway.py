@@ -23,7 +23,7 @@ from src.core_contracts.context_contracts import (
     ReactiveCompactOutcome,
     SnipResult,
 )
-from src.context.budget_projector import BudgetProjector
+from src.context.token_estimator import TokenEstimator
 from src.context.compactor import Compactor
 from src.context.snipper import Snipper
 
@@ -53,21 +53,21 @@ def _add_usage(a: TokenUsage, b: TokenUsage) -> TokenUsage:
 class ContextGateway:
     """对外暴露 context 治理能力并严格隔离内部实现细节的网关类。
 
-    所有内部构件（BudgetProjector、Snipper、Compactor）通过构造注入，
+    所有内部构件（TokenEstimator、Snipper、Compactor）通过构造注入，
     网关本身不实例化任何内部类，只负责编排协调。
     """
 
     def __init__(
         self,
         *,
-        budget_projector: BudgetProjector,
+        token_estimator: TokenEstimator,
         snipper: Snipper,
         compactor: Compactor | None = None,
     ) -> None:
         """通过依赖注入初始化 context 网关。
 
         Args:
-            budget_projector (BudgetProjector): token 预算投影器实例。
+            token_estimator (TokenEstimator): token 估算器实例，兼预算投影。
             snipper (Snipper): 轻量剪裁器实例，负责 tombstone 化降载。
             compactor (Compactor | None): 摘要压缩器实例；无客户端时传 None。
         Returns:
@@ -75,8 +75,8 @@ class ContextGateway:
         Raises:
             无。
         """
-        self._budget_projector = budget_projector
-        # BudgetProjector: token 预算投影器，用于预检输入上下文成本。
+        self._token_estimator = token_estimator
+        # TokenEstimator: token 估算器，用于预检输入上下文成本。
         self._snipper = snipper
         # Snipper: 轻量剪裁器，用于 soft-over 阶段的 tombstone 化降载。
         self._compactor = compactor
@@ -268,7 +268,7 @@ class ContextGateway:
         budget_config: BudgetConfig,
         tools: list[dict],
     ) -> BudgetProjection:
-        """委托 BudgetProjector 执行预算投影。
+        """委托 TokenEstimator 执行预算投影。
 
         Args:
             messages (list[Message]): 当前会话消息列表。
@@ -279,7 +279,7 @@ class ContextGateway:
         Raises:
             无。
         """
-        return self._budget_projector.project(
+        return self._token_estimator.project_budget(
             messages,
             tools=tools,
             max_input_tokens=budget_config.max_input_tokens,

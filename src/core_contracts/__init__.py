@@ -56,6 +56,7 @@ from src.core_contracts.interaction_contracts import (
     SlashCommandResolution,
     SlashDispatcher,
 )
+from src.core_contracts.workspace_config import WorkspaceConfig
 
 __all__ = [
     "Message",
@@ -106,4 +107,5 @@ __all__ = [
     "SlashCommandSpec",
     "SlashCommandResolution",
     "SlashDispatcher",
+    "WorkspaceConfig",
 ]

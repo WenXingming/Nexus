@@ -140,3 +140,87 @@ class TestCountChars:
         e = TokenEstimator(chars_per_token=2)
         assert e._count_chars("ab") == 1
         assert e._count_chars("abc") == 2
+
+
+# =============================================================================
+# project_budget
+# =============================================================================
+
+
+class TestProjectBudget:
+    def test_no_limit_returns_all_false(self, estimator: TokenEstimator) -> None:
+        """不设 max_input_tokens 时两个 over 标记均为 False。"""
+        msgs = [Message(role="system", content="You are helpful."), Message(role="user", content="Hello")]
+        result = estimator.project_budget(msgs)
+        assert result.is_hard_over is False
+        assert result.is_soft_over is False
+        assert result.hard_input_limit is None
+        assert result.soft_input_limit is None
+
+    def test_no_limit_projected_positive(self, estimator: TokenEstimator) -> None:
+        """不设限制时 projected_input_tokens 依然为正数。"""
+        msgs = [Message(role="system", content="You are helpful."), Message(role="user", content="Hello")]
+        result = estimator.project_budget(msgs)
+        assert result.projected_input_tokens > 0
+
+    def test_output_reserve_reflected(self, estimator: TokenEstimator) -> None:
+        """output_reserve_tokens 按传入值返回。"""
+        msgs = [Message(role="user", content="Hello")]
+        result = estimator.project_budget(msgs, output_reserve_tokens=1024)
+        assert result.output_reserve_tokens == 1024
+
+    def test_within_limits(self, estimator: TokenEstimator) -> None:
+        """投影远小于上限时两个 over 均为 False。"""
+        msgs = [Message(role="user", content="Hello")]
+        result = estimator.project_budget(msgs, max_input_tokens=100_000)
+        assert result.is_hard_over is False
+        assert result.is_soft_over is False
+
+    def test_hard_limit_set(self, estimator: TokenEstimator) -> None:
+        """设了上限后 hard_input_limit 与 soft_input_limit 均被计算。"""
+        msgs = [Message(role="user", content="Hello")]
+        result = estimator.project_budget(msgs, max_input_tokens=10_000)
+        assert result.hard_input_limit == 10_000
+        assert result.soft_input_limit is not None
+
+    def test_soft_over_triggered(self) -> None:
+        """当 projected > soft_limit 但 <= usable 时，is_soft_over=True，is_hard_over=False。"""
+        from unittest.mock import MagicMock
+        mock_estimator = MagicMock(spec=TokenEstimator)
+        mock_estimator.estimate_messages.return_value = 50
+        mock_estimator.estimate_tools.return_value = 0
+        # 直接调用 project_budget 方法（使用真实实现）
+        mock_estimator.project_budget = TokenEstimator.project_budget.__get__(mock_estimator)
+        msgs = [Message(role="user", content="hi")]
+        result = mock_estimator.project_budget(msgs, max_input_tokens=200, output_reserve_tokens=100, soft_buffer_tokens=90)
+        # usable=200-100=100, soft_limit=max(0,100-90)=10 → 50 > 10 soft_over
+        assert result.is_soft_over is True
+        assert result.is_hard_over is False
+
+    def test_hard_over_triggered(self) -> None:
+        """当 projected > usable 时，is_hard_over=True。"""
+        from unittest.mock import MagicMock
+        mock_estimator = MagicMock(spec=TokenEstimator)
+        mock_estimator.estimate_messages.return_value = 200
+        mock_estimator.estimate_tools.return_value = 0
+        mock_estimator.project_budget = TokenEstimator.project_budget.__get__(mock_estimator)
+        msgs = [Message(role="user", content="hi")]
+        result = mock_estimator.project_budget(msgs, max_input_tokens=100, output_reserve_tokens=50)
+        # usable=100-50=50, projected=200 → hard_over
+        assert result.is_hard_over is True
+        assert result.is_soft_over is True  # hard_over 必然也 soft_over
+
+    def test_tools_add_to_projected(self, estimator: TokenEstimator) -> None:
+        """携带工具 schema 时 projected_input_tokens 大于不携带时的值。"""
+        msgs = [Message(role="user", content="Hello")]
+        tools = [{"type": "function", "function": {"name": "run", "parameters": {}}}]
+        result_no_tools = estimator.project_budget(msgs)
+        result_with_tools = estimator.project_budget(msgs, tools=tools)
+        assert result_with_tools.projected_input_tokens > result_no_tools.projected_input_tokens
+
+    def test_none_tools_treated_as_empty(self, estimator: TokenEstimator) -> None:
+        """tools=None 与 tools=[] 投影结果相同。"""
+        msgs = [Message(role="user", content="Hello")]
+        result_none = estimator.project_budget(msgs, tools=None)
+        result_empty = estimator.project_budget(msgs, tools=[])
+        assert result_none.projected_input_tokens == result_empty.projected_input_tokens

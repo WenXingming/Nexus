@@ -1,6 +1,6 @@
 """ContextGateway 单元测试。
 
-通过 Mock 严格隔离 BudgetProjector、Snipper、Compactor、
+通过 Mock 严格隔离 TokenEstimator、Snipper、Compactor、
 PreModelBudgetGuard 以及 ContextModelClient，
 验证三条公有路径的编排逻辑、事件产出与 run_state 状态更新。
 """
@@ -94,10 +94,10 @@ def make_compact_result(compacted: bool = True, replaced: int = 3) -> Compaction
 
 
 @pytest.fixture
-def mock_projector() -> MagicMock:
-    proj = MagicMock()
-    proj.project.return_value = make_snapshot()
-    return proj
+def mock_estimator() -> MagicMock:
+    est = MagicMock()
+    est.project_budget.return_value = make_snapshot()
+    return est
 
 
 @pytest.fixture
@@ -129,20 +129,20 @@ def mock_guard() -> MagicMock:
 
 @pytest.fixture
 def gateway(
-    mock_projector: MagicMock,
+    mock_estimator: MagicMock,
     mock_snipper: MagicMock,
     mock_compactor: MagicMock,
 ) -> ContextGateway:
     return ContextGateway(
-        budget_projector=mock_projector,
+        token_estimator=mock_estimator,
         snipper=mock_snipper,
         compactor=mock_compactor,
     )
 
 
 @pytest.fixture
-def gateway_no_client(mock_projector: MagicMock, mock_snipper: MagicMock) -> ContextGateway:
-    return ContextGateway(budget_projector=mock_projector, snipper=mock_snipper)
+def gateway_no_client(mock_estimator: MagicMock, mock_snipper: MagicMock) -> ContextGateway:
+    return ContextGateway(token_estimator=mock_estimator, snipper=mock_snipper)
 
 
 @pytest.fixture
@@ -170,15 +170,15 @@ def policy() -> ContextPolicy:
 
 
 class TestProjectBudget:
-    def test_delegates_to_projector(
+    def test_delegates_to_estimator(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         run_state: FakeRunState,
     ) -> None:
-        """project_budget 将调用委托给 BudgetProjector。"""
+        """project_budget 将调用委托给 TokenEstimator。"""
         gateway.project_budget(run_state.session_messages)
-        mock_projector.project.assert_called_once()
+        mock_estimator.project_budget.assert_called_once()
 
     def test_returns_projection(self, gateway: ContextGateway, run_state: FakeRunState) -> None:
         """project_budget 返回 BudgetProjection 对象。"""
@@ -188,12 +188,12 @@ class TestProjectBudget:
     def test_none_config_uses_defaults(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         run_state: FakeRunState,
     ) -> None:
         """budget_config=None 时使用 BudgetConfig 默认值（不设硬限）。"""
         gateway.project_budget(run_state.session_messages, budget_config=None)
-        _, kwargs = mock_projector.project.call_args
+        _, kwargs = mock_estimator.project_budget.call_args
         assert kwargs["max_input_tokens"] is None
 
 
@@ -268,7 +268,7 @@ class TestRunPreModelCycleSnip:
     def test_snip_triggered_when_soft_over(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_snipper: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
@@ -276,7 +276,7 @@ class TestRunPreModelCycleSnip:
         mock_guard: MagicMock,
     ) -> None:
         """is_soft_over=True 时 snipper.snip 被调用。"""
-        mock_projector.project.return_value = make_snapshot(soft_over=True)
+        mock_estimator.project_budget.return_value = make_snapshot(soft_over=True)
         mock_snipper.snip.return_value = SnipResult(snipped_count=0, tokens_removed=0)
         gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -290,7 +290,7 @@ class TestRunPreModelCycleSnip:
     def test_snip_event_emitted_when_snipped(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_snipper: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
@@ -298,7 +298,7 @@ class TestRunPreModelCycleSnip:
         mock_guard: MagicMock,
     ) -> None:
         """snip_count > 0 时 snip_boundary 事件被产出。"""
-        mock_projector.project.side_effect = [
+        mock_estimator.project_budget.side_effect = [
             make_snapshot(soft_over=True),  # 第一次投影
             make_snapshot(soft_over=False),  # snip 后重新投影
         ]
@@ -316,7 +316,7 @@ class TestRunPreModelCycleSnip:
     def test_no_snip_event_when_nothing_snipped(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_snipper: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
@@ -324,7 +324,7 @@ class TestRunPreModelCycleSnip:
         mock_guard: MagicMock,
     ) -> None:
         """snipped_count=0 时不产出 snip_boundary 事件。"""
-        mock_projector.project.return_value = make_snapshot(soft_over=True)
+        mock_estimator.project_budget.return_value = make_snapshot(soft_over=True)
         mock_snipper.snip.return_value = SnipResult(snipped_count=0, tokens_removed=0)
         result = gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -372,14 +372,14 @@ class TestRunPreModelCycleAutoCompact:
     def test_auto_compact_triggered(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_compactor: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         mock_guard: MagicMock,
     ) -> None:
         """projected 超过 auto_compact_threshold 时 compactor.compact 被调用。"""
-        mock_projector.project.return_value = make_snapshot(projected=9000)
+        mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         mock_compactor.compact.return_value = make_compact_result(compacted=True)
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         gateway.run_pre_model_cycle(
@@ -394,14 +394,14 @@ class TestRunPreModelCycleAutoCompact:
     def test_compact_event_emitted_on_success(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_compactor: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         mock_guard: MagicMock,
     ) -> None:
         """auto-compact 成功时产出 compact_boundary 事件。"""
-        mock_projector.project.return_value = make_snapshot(projected=9000)
+        mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         mock_compactor.compact.return_value = make_compact_result(compacted=True)
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         result = gateway.run_pre_model_cycle(
@@ -417,14 +417,14 @@ class TestRunPreModelCycleAutoCompact:
     def test_compact_failed_event_emitted(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_compactor: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         mock_guard: MagicMock,
     ) -> None:
         """auto-compact 失败时产出 compact_failed 事件。"""
-        mock_projector.project.return_value = make_snapshot(projected=9000)
+        mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         failed = CompactionResult(compacted=False, error="no messages to compact")
         mock_compactor.compact.return_value = failed
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
@@ -441,14 +441,14 @@ class TestRunPreModelCycleAutoCompact:
     def test_auto_compact_updates_usage_and_call_count(
         self,
         gateway: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         mock_compactor: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         mock_guard: MagicMock,
     ) -> None:
         """auto-compact 成功后 run_state.model_call_count += 1 且 usage_delta 增加。"""
-        mock_projector.project.return_value = make_snapshot(projected=9000)
+        mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         compact_res = make_compact_result(compacted=True)
         mock_compactor.compact.return_value = compact_res
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
@@ -465,13 +465,13 @@ class TestRunPreModelCycleAutoCompact:
     def test_no_auto_compact_without_client(
         self,
         gateway_no_client: ContextGateway,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         mock_guard: MagicMock,
     ) -> None:
         """未配置 compactor 时，即使超过阈值也不触发 compact。"""
-        mock_projector.project.return_value = make_snapshot(projected=9000)
+        mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         # 不应抛出，应正常完成
         result = gateway_no_client.run_pre_model_cycle(
@@ -494,7 +494,7 @@ class TestRunReactiveCompactCycle:
         self,
         gateway: ContextGateway,
         mock_compactor: MagicMock,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         policy: ContextPolicy,
@@ -503,7 +503,7 @@ class TestRunReactiveCompactCycle:
         """context 错误且 compact 成功时，返回 retry_model_call=True。"""
         mock_compactor.is_context_length_error.return_value = True
         mock_compactor.compact.return_value = make_compact_result(compacted=True)
-        mock_projector.project.return_value = make_snapshot()
+        mock_estimator.project_budget.return_value = make_snapshot()
 
         result = gateway.run_reactive_compact_cycle(
             run_state=run_state,
@@ -601,7 +601,7 @@ class TestRunReactiveCompactCycle:
         self,
         gateway: ContextGateway,
         mock_compactor: MagicMock,
-        mock_projector: MagicMock,
+        mock_estimator: MagicMock,
         run_state: FakeRunState,
         budget_config: BudgetConfig,
         policy: ContextPolicy,
@@ -609,7 +609,7 @@ class TestRunReactiveCompactCycle:
         """compact 后 guard 拒绝继续时返回 stop_reason。"""
         mock_compactor.is_context_length_error.return_value = True
         mock_compactor.compact.return_value = make_compact_result(compacted=True)
-        mock_projector.project.return_value = make_snapshot()
+        mock_estimator.project_budget.return_value = make_snapshot()
         guard = MagicMock()
         guard.check_pre_model.return_value = "hard_budget_exceeded"
 

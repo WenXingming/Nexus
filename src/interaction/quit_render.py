@@ -72,7 +72,7 @@ class ExitRenderer(TerminalRenderer):
             None: 该方法只负责把提示框写入目标流。
         """
         content_lines = self._build_content_lines(summary)
-        self._render_block(content_lines, stream=stream)
+        self._render_block(content_lines, stream=stream, active_title=self._title)
 
     def _build_content_lines(self, summary: SessionSummary) -> tuple[str, ...]:
         """构建提示框正文。
@@ -123,6 +123,33 @@ class ExitRenderer(TerminalRenderer):
         if minutes:
             return f'{minutes}m {secs:02d}s'
         return f'{secs}s'
+
+    def _render_content_text(
+        self,
+        text: str,
+        content_width: int,
+        use_ansi: bool,
+        *,
+        active_title: str = '',
+    ) -> str:
+        """渲染退出框正文行，标题行用渐变色，小节标题用边框色。
+
+        Args:
+            text (str): 当前正文文本。
+            content_width (int): 正文区域的目标宽度。
+            use_ansi (bool): 是否启用 ANSI 着色。
+            active_title (str): 标题文本，用于匹配渐变着色行。
+        Returns:
+            str: 已补齐宽度并按需着色的正文行。
+        """
+        padded = self._pad_to_display_width(text, content_width)
+        if not use_ansi:
+            return padded
+        if active_title and text == active_title:
+            return self._colorize_gradient_line(padded)
+        if text in ('Interaction Summary', 'Performance'):
+            return super()._colorize_frame(padded)
+        return padded
 
     def _colorize_frame(self, text: str) -> str:
         """为边框应用浅白或渐变色。

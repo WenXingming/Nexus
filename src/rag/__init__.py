@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from core_contracts.model_config import ModelConfig, RagModelConfig
+from src.core_contracts.model_config import ModelConfig, RagModelConfig
 from src.rag.document_chunker import DocumentChunker as _DocumentChunker
 from src.rag.document_loader import DocumentLoader as _DocumentLoader
 from src.rag.embedding_provider import OpenAIEmbeddingProvider as _OpenAIEmbeddingProvider
