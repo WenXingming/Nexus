@@ -1,8 +1,7 @@
 """OpenAI Embeddings 适配器。
 
 本模块提供 RAG 所需的最小文本嵌入能力，将 OpenAI SDK 的
-embeddings 接口适配为 src.core_contracts.rag_contracts.EmbeddingProvider
-协议，供 RagGateway 通过依赖注入使用。
+embeddings 接口适配为嵌入向量提供者，供 RagGateway 通过依赖注入使用。
 """
 
 from __future__ import annotations
@@ -11,55 +10,93 @@ import openai
 from openai import OpenAI
 
 from src.core_contracts.model_config import ModelConfig, RagModelConfig
+from src.core_contracts.rag_contracts import RagChunk, RagEmbedding
 
 
 class OpenAIEmbeddingProvider:
-    """基于 OpenAI Embeddings API 的文本嵌入提供者。"""
+    """基于 OpenAI Embeddings API 的文本嵌入提供者。
+
+    公开接口：
+      - embed_chunks: 索引路径，list[RagChunk] → list[RagEmbedding]
+      - embed_query:  检索路径，单条查询 → 单个向量
+    """
+
+    _BATCH_SIZE = 128
 
     def __init__(
         self,
         model_config: ModelConfig,
         rag_config: RagModelConfig,
     ) -> None:
-        """初始化嵌入提供者并创建底层 OpenAI 客户端。
-
-        Args:
-            model_config (ModelConfig): 包含 API 凭据与聊天模型名的配置。
-            rag_config (RagModelConfig): RAG embeddings 配置。
-        Raises:
-            ValueError: API key 或 embeddings/chat 模型名为空字符串时抛出。
-        """
+        """初始化嵌入提供者并创建底层 OpenAI 客户端。"""
         if not model_config.api_key or not model_config.api_key.strip():
             raise ValueError("ModelConfig.api_key 不能为空字符串。")
         if not rag_config.embedding_model.strip():
             raise ValueError("RagModelConfig.embedding_model 不能为空字符串。")
         if not model_config.model_name.strip():
             raise ValueError("ModelConfig.model_name 不能为空字符串。")
-        self._embedding_model = rag_config.embedding_model  # str：首选 embeddings 模型名称。
-        self._fallback_model = model_config.model_name      # str：降级使用的聊天模型名称。
-        self._client = OpenAI(  # OpenAI：底层 OpenAI SDK 客户端。
+        self._embedding_model = rag_config.embedding_model
+        self._fallback_model = model_config.model_name
+        self._client = OpenAI(
             api_key=model_config.api_key,
             base_url=model_config.base_url,
         )
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """将文本列表批量转换为嵌入向量列表。
+    # ── 公有接口 ────────────────────────────────────────────────────────────
+
+    def embed_chunks(self, chunks: list[RagChunk]) -> list[RagEmbedding]:
+        """索引路径：将分块列表嵌入并绑定为 RagEmbedding 列表。
 
         Args:
-            texts (list[str]): 待嵌入的文本列表。
+            chunks (list[RagChunk]): 待嵌入的分块列表。
         Returns:
-            list[list[float]]: 与输入文本等长的嵌入向量列表。
+            list[RagEmbedding]: 与输入等长的嵌入向量列表，每个元素绑定其原始分块。
         Raises:
-            ValueError: texts 中存在空白字符串时抛出。
-            RuntimeError: OpenAI 接口异常或响应结构异常时抛出。
-            TimeoutError: 请求超时时抛出。
-            PermissionError: API 认证失败时抛出。
+            ValueError: chunks 为空或存在空白内容时抛出。
+            RuntimeError: OpenAI 接口异常或响应数量不匹配时抛出。
+        """
+        if not chunks:
+            return []
+        texts = [chunk.content for chunk in chunks]
+        vectors = self._embed_texts(texts)
+        return [
+            RagEmbedding(chunk=chunk, vector=vector)
+            for chunk, vector in zip(chunks, vectors)
+        ]
+
+    def embed_query(self, query: str) -> list[float]:
+        """检索路径：将单条查询文本嵌入为向量。
+
+        Args:
+            query (str): 查询文本。
+        Returns:
+            list[float]: 查询嵌入向量。
+        Raises:
+            ValueError: query 为空白字符串时抛出。
+            RuntimeError: OpenAI 接口异常时抛出。
+        """
+        return self._embed_texts([query])[0]
+
+    # ── 私有方法 ────────────────────────────────────────────────────────────
+
+    def _embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """底层：将文本列表批量转换为嵌入向量列表。
+
+        内部自动分批，降低峰值内存与第三方 API 限频风险。
         """
         if not texts:
             return []
         if any(not text.strip() for text in texts):
             raise ValueError("texts 中不能包含空白字符串。")
 
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self._BATCH_SIZE):
+            batch = texts[start:start + self._BATCH_SIZE]
+            vectors.extend(self._embed_batch(batch))
+        return vectors
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """单批嵌入：调用 OpenAI API 并校验返回数量。"""
         try:
             response = self._create_embeddings(model=self._embedding_model, texts=texts)
         except openai.OpenAIError as exc:
@@ -83,28 +120,11 @@ class OpenAIEmbeddingProvider:
         return [item.embedding for item in response.data]
 
     def _create_embeddings(self, model: str, texts: list[str]) -> object:
-        """调用 OpenAI embeddings.create 接口。
-
-        Args:
-            model (str): 本次调用的模型名称。
-            texts (list[str]): 待嵌入文本列表。
-        Returns:
-            object: OpenAI SDK 返回的 embeddings 响应对象。
-        Raises:
-            openai.OpenAIError: 底层 SDK 抛出的调用异常。
-        """
+        """调用 OpenAI embeddings.create 接口。"""
         return self._client.embeddings.create(model=model, input=texts)
 
     def _should_fallback_to_chat_model(self, error: openai.OpenAIError) -> bool:
-        """判断是否应从 embeddings 模型降级到聊天模型。
-
-        Args:
-            error (openai.OpenAIError): 首选 embeddings 模型调用异常。
-        Returns:
-            bool: 仅当错误为模型不存在/无权限且降级模型与首选模型不同才返回 True。
-        Raises:
-            None
-        """
+        """判断是否应从 embeddings 模型降级到聊天模型。"""
         if self._fallback_model == self._embedding_model:
             return False
 
@@ -124,15 +144,7 @@ class OpenAIEmbeddingProvider:
         return False
 
     def _translate_error(self, error: openai.OpenAIError) -> Exception:
-        """将 OpenAI SDK 异常翻译为 Python 内置异常。
-
-        Args:
-            error (openai.OpenAIError): 原始 OpenAI SDK 异常。
-        Returns:
-            Exception: 翻译后的标准异常对象。
-        Raises:
-            None
-        """
+        """将 OpenAI SDK 异常翻译为 Python 内置异常。"""
         msg = str(error)
         if isinstance(error, openai.AuthenticationError):
             return PermissionError(msg)

@@ -13,10 +13,10 @@ from src.core_contracts.interaction_contracts import (
     SlashCommandResult,
     SlashCommandSpec,
 )
+from src.core_contracts.client_contracts import LlmRequest
 from src.core_contracts.rag_contracts import (
-    RagCollectionNotFoundError,
+    RagError,
     RagIndexRequest,
-    RagQueryRequest,
 )
 from src.core_contracts.session_contracts import SessionState
 from src.rag import RagGateway
@@ -30,12 +30,14 @@ def build_default_slash_command_specs(
     context_gateway: ContextGateway | None = None,
     session_gateway: SessionGateway | None = None,
     rag_gateway: RagGateway | None = None,
+    client_gateway = None,
 ) -> tuple[SlashCommandSpec, ...]:
     """构造应用默认的 slash 命令规格列表。"""
     registry = SlashCommandRegistry(
         context_gateway=context_gateway,
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
+        client_gateway=client_gateway,
     )
     return registry.get_specs()
 
@@ -55,10 +57,12 @@ class SlashCommandRegistry:
         context_gateway: ContextGateway | None = None,
         session_gateway: SessionGateway | None = None,
         rag_gateway: RagGateway | None = None,
+        client_gateway = None,
     ):
         self._context_gateway = context_gateway
         self._session_gateway = session_gateway
         self._rag_gateway = rag_gateway
+        self._client_gateway = client_gateway
         self._specs = self._register_commands()
 
     def get_specs(self) -> tuple[SlashCommandSpec, ...]:
@@ -421,7 +425,7 @@ class SlashCommandRegistry:
                 metadata={'error': 'missing_argument'},
             )
         try:
-            result = self._rag_gateway.index_documents(
+            result = self._rag_gateway.index(
                 RagIndexRequest(
                     source_path=source,
                     collection_name=_MAIN_LOOP_COLLECTION,
@@ -471,27 +475,29 @@ class SlashCommandRegistry:
         try:
             if self._session_gateway is not None:
                 self._session_gateway.append_user(context.session_state, question)
-            result = self._rag_gateway.query(
-                RagQueryRequest(
-                    query=question,
-                    collection_name=_MAIN_LOOP_COLLECTION,
-                )
+            messages = self._rag_gateway.retrieve_and_build_messages(
+                query=question,
+                collection_name=_MAIN_LOOP_COLLECTION,
             )
+            llm_result = self._client_gateway.chat(
+                LlmRequest(messages=messages, max_tokens=1024)
+            )
+            answer = llm_result.content.strip()
             if self._session_gateway is not None:
-                self._session_gateway.append_assistant(context.session_state, result.answer)
+                self._session_gateway.append_assistant(context.session_state, answer)
             return SlashCommandResult(
                 handled=True,
                 continue_query=False,
                 command_name='rag-ask',
-                output=f'\nRAG> {result.answer}',
+                output=f'\nRAG> {answer}',
             )
-        except RagCollectionNotFoundError:
+        except RagError as exc:
             return SlashCommandResult(
                 handled=True,
                 continue_query=False,
                 command_name='rag-ask',
-                output='[错误] 当前还没有可用的 RAG 索引，请先执行 /rag-index。',
-                metadata={'error': 'collection_not_found'},
+                output=f'[错误] RAG 查询失败: {exc}',
+                metadata={'error': 'rag_error'},
             )
         except Exception as exc:
             return SlashCommandResult(

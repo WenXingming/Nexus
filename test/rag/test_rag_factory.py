@@ -15,12 +15,10 @@ from src.rag import build_rag_gateway
 def test_build_rag_gateway_creates_embedding_provider_internally() -> None:
     model_config = ModelConfig(api_key="sk-test", model_name="gpt-4o-mini")
     rag_config = RagModelConfig(embedding_model="text-embedding-3-small")
-    model_client = MagicMock()
 
-    with patch("src.rag.embedding_provider.OpenAIEmbeddingProvider") as mock_provider, \
-        patch("src.rag.document_loader.DocumentLoader") as mock_loader:
+    with patch("src.rag._OpenAIEmbeddingProvider") as mock_provider, \
+        patch("src.rag._DocumentLoader") as mock_loader:
         gateway = build_rag_gateway(
-            model_client=model_client,
             model_config=model_config,
             rag_config=rag_config,
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from src.agent.agent_executor import AgentLoopExecutor
 from src.agent.agent_gateway import AgentGateway
 from src.core_contracts.client_contracts import LlmResult
 from src.core_contracts.context_contracts import (
@@ -23,6 +24,17 @@ def _make_gateway() -> AgentGateway:
     session_gateway = MagicMock()
     tools_gateway = MagicMock()
     interaction_gateway = MagicMock()
+    executor = AgentLoopExecutor(
+        client=client,
+        context_gateway=context_gateway,
+        session_gateway=session_gateway,
+        tools_gateway=tools_gateway,
+        interaction_gateway=interaction_gateway,
+        budget_config=BudgetConfig(),
+        context_policy=ContextPolicy(),
+        budget_guard=PreModelBudgetGuard(),
+        tools=[],
+    )
     return AgentGateway(
         client=client,
         context_gateway=context_gateway,
@@ -33,7 +45,7 @@ def _make_gateway() -> AgentGateway:
         context_policy=ContextPolicy(),
         budget_guard=PreModelBudgetGuard(),
         tools=[],
-        context_event_printer=lambda _events: None,
+        executor=executor,
     )
 
 

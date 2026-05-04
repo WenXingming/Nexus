@@ -116,7 +116,6 @@ class Application:
         self._tools_gateway = create_tools_gateway(mcp_config=self._mcp_config)
         rag_config = RagModelConfig.from_env()
         self._rag_gateway = build_rag_gateway(
-            model_client=self._client,
             model_config=self._config,
             rag_config=rag_config,
         )
@@ -124,6 +123,7 @@ class Application:
             context_gateway=self._context_gateway,
             session_gateway=self._session_gateway,
             rag_gateway=self._rag_gateway,
+            client_gateway=self._client,
         )
         self._interaction_gateway = create_interaction_gateway(slash_specs=slash_specs)
         self._tools = [tool.to_openai_tool() for tool in self._tools_gateway.list_tools()]
