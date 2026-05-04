@@ -27,7 +27,7 @@ class ModelConfig:
     base_url: str | None = None
     model_name: str = "gpt-4o"
     temperature: float = 0.7
-    max_tokens: int = 1024
+    max_tokens: int = 1_000_000
 
     @classmethod
     def from_env(cls) -> "ModelConfig":
@@ -55,7 +55,7 @@ class ModelConfig:
             base_url=os.environ.get("OPENAI_BASE_URL") or None,
             model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
             temperature=float(os.environ.get("OPENAI_TEMPERATURE", "0.7")),
-            max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "1024")),
+            max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "1000000")),
         )
 
 

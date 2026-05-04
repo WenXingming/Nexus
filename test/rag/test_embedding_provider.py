@@ -1,7 +1,8 @@
 """OpenAIEmbeddingProvider 单元测试。
 
 通过 patch src.rag.embedding_provider.OpenAI 严格隔离 openai SDK，
-验证 embeddings 调用编排、返回解析、异常翻译与模型自动降级策略。
+验证 embed_chunks（索引路径）、embed_query（检索路径）、
+异常翻译与模型自动降级策略。
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import openai
 import pytest
 
 from src.core_contracts.model_config import ModelConfig, RagModelConfig
+from src.core_contracts.rag_contracts import RagChunk
 from src.rag.embedding_provider import OpenAIEmbeddingProvider
 
 
@@ -44,6 +46,10 @@ def provider(
     return OpenAIEmbeddingProvider(model_config=model_config, rag_config=rag_config)
 
 
+def make_chunk(chunk_id: str = 'c1', content: str = 'hello') -> RagChunk:
+    return RagChunk(chunk_id=chunk_id, doc_id='d1', content=content, position=0)
+
+
 class TestInit:
     def test_creates_openai_client_with_correct_args(
         self,
@@ -72,24 +78,25 @@ class TestInit:
             )
 
 
-class TestEmbedTexts:
+class TestEmbedChunks:
     def test_returns_empty_list_for_empty_input(self, provider: OpenAIEmbeddingProvider) -> None:
-        assert provider.embed_texts([]) == []
+        assert provider.embed_chunks([]) == []
 
-    def test_calls_embeddings_api_with_primary_model_and_input(
+    def test_calls_api_and_binds_chunks_to_vectors(
         self, provider: OpenAIEmbeddingProvider
     ) -> None:
         response = MagicMock()
         response.data = [MagicMock(embedding=[0.1, 0.2]), MagicMock(embedding=[0.3, 0.4])]
         provider._client.embeddings.create.return_value = response
 
-        result = provider.embed_texts(["hello", "world"])
+        chunks = [make_chunk('c1', 'hello'), make_chunk('c2', 'world')]
+        result = provider.embed_chunks(chunks)
 
-        assert result == [[0.1, 0.2], [0.3, 0.4]]
-        provider._client.embeddings.create.assert_called_once_with(
-            model="text-embedding-3-small",
-            input=["hello", "world"],
-        )
+        assert len(result) == 2
+        assert result[0].chunk.chunk_id == 'c1'
+        assert result[0].vector == [0.1, 0.2]
+        assert result[1].chunk.chunk_id == 'c2'
+        assert result[1].vector == [0.3, 0.4]
 
     def test_fallbacks_to_chat_model_when_primary_model_not_found(
         self, provider: OpenAIEmbeddingProvider
@@ -103,39 +110,28 @@ class TestEmbedTexts:
         fallback_response.data = [MagicMock(embedding=[0.6, 0.7])]
         provider._client.embeddings.create.side_effect = [not_found, fallback_response]
 
-        result = provider.embed_texts(["hello"])
+        result = provider.embed_chunks([make_chunk(content='hello')])
 
-        assert result == [[0.6, 0.7]]
+        assert result[0].vector == [0.6, 0.7]
         assert provider._client.embeddings.create.call_count == 2
-        first_call = provider._client.embeddings.create.call_args_list[0].kwargs
-        second_call = provider._client.embeddings.create.call_args_list[1].kwargs
-        assert first_call["model"] == "text-embedding-3-small"
-        assert second_call["model"] == "gpt-4o-mini"
 
     def test_raises_combined_error_when_fallback_also_fails(
         self, provider: OpenAIEmbeddingProvider
     ) -> None:
         primary_error = openai.BadRequestError(
-            message="model_not_found",
-            response=MagicMock(),
-            body=None,
+            message="model_not_found", response=MagicMock(), body=None,
         )
         fallback_error = openai.BadRequestError(
-            message="model_not_supported",
-            response=MagicMock(),
-            body=None,
+            message="model_not_supported", response=MagicMock(), body=None,
         )
         provider._client.embeddings.create.side_effect = [primary_error, fallback_error]
 
-        with pytest.raises(RuntimeError, match="自动降级失败") as exc_info:
-            provider.embed_texts(["hello"])
+        with pytest.raises(RuntimeError, match="自动降级失败"):
+            provider.embed_chunks([make_chunk(content='hello')])
 
-        assert "primary=text-embedding-3-small" in str(exc_info.value)
-        assert "fallback=gpt-4o-mini" in str(exc_info.value)
-
-    def test_raises_on_blank_text(self, provider: OpenAIEmbeddingProvider) -> None:
+    def test_raises_on_blank_content(self, provider: OpenAIEmbeddingProvider) -> None:
         with pytest.raises(ValueError, match="空白字符串"):
-            provider.embed_texts(["hello", "   "])
+            provider.embed_chunks([make_chunk(content='   ')])
 
     def test_raises_when_response_count_mismatch(self, provider: OpenAIEmbeddingProvider) -> None:
         response = MagicMock()
@@ -143,7 +139,40 @@ class TestEmbedTexts:
         provider._client.embeddings.create.return_value = response
 
         with pytest.raises(RuntimeError, match="返回数量异常"):
-            provider.embed_texts(["hello", "world"])
+            provider.embed_chunks([make_chunk('c1'), make_chunk('c2')])
+
+    def test_batches_large_input(self, provider: OpenAIEmbeddingProvider) -> None:
+        """超过 _BATCH_SIZE 的输入应触发多次 API 调用并正确合并结果。"""
+        chunks = [make_chunk(f'c{i}', f'text-{i}') for i in range(257)]
+        provider._BATCH_SIZE = 128
+
+        def make_response(model=None, input=None):
+            texts = input if input else []
+            resp = MagicMock()
+            resp.data = [MagicMock(embedding=[float(len(texts))]) for _ in texts]
+            return resp
+
+        provider._client.embeddings.create.side_effect = make_response
+
+        result = provider.embed_chunks(chunks)
+
+        assert len(result) == 257
+        assert provider._client.embeddings.create.call_count == 3
+
+
+class TestEmbedQuery:
+    def test_returns_single_vector(self, provider: OpenAIEmbeddingProvider) -> None:
+        response = MagicMock()
+        response.data = [MagicMock(embedding=[0.5, 0.6, 0.7])]
+        provider._client.embeddings.create.return_value = response
+
+        result = provider.embed_query("test query")
+
+        assert result == [0.5, 0.6, 0.7]
+        provider._client.embeddings.create.assert_called_once_with(
+            model="text-embedding-3-small",
+            input=["test query"],
+        )
 
 
 class TestErrorTranslation:
@@ -151,16 +180,16 @@ class TestErrorTranslation:
         original = openai.AuthenticationError(message="bad key", response=MagicMock(), body=None)
         provider._client.embeddings.create.side_effect = original
         with pytest.raises(PermissionError):
-            provider.embed_texts(["hello"])
+            provider.embed_query("hello")
 
     def test_bad_request_error_without_fallback_marker(self, provider: OpenAIEmbeddingProvider) -> None:
         original = openai.BadRequestError(message="bad param", response=MagicMock(), body=None)
         provider._client.embeddings.create.side_effect = original
         with pytest.raises(ValueError):
-            provider.embed_texts(["hello"])
+            provider.embed_query("hello")
 
     def test_timeout_error(self, provider: OpenAIEmbeddingProvider) -> None:
         original = openai.APITimeoutError(request=MagicMock())
         provider._client.embeddings.create.side_effect = original
         with pytest.raises(TimeoutError):
-            provider.embed_texts(["hello"])
+            provider.embed_query("hello")

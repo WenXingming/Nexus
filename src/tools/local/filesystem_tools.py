@@ -25,8 +25,16 @@ class FileSystemToolProvider:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string"},
-                        "max_entries": {"type": "integer", "minimum": 1, "maximum": 500},
+                        "path": {
+                            "type": "string",
+                            "description": "要列出的目录路径，相对于工作区根目录。默认为 '.'（当前目录）。",
+                        },
+                        "max_entries": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "description": "最多返回的条目数量，范围 1-500，默认 200。",
+                        },
                     },
                 },
                 handler=self._list_dir,
@@ -37,9 +45,20 @@ class FileSystemToolProvider:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string"},
-                        "start_line": {"type": "integer", "minimum": 1},
-                        "end_line": {"type": "integer", "minimum": 1},
+                        "path": {
+                            "type": "string",
+                            "description": "要读取的文件路径，相对于工作区根目录。",
+                        },
+                        "start_line": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "起始行号（从 1 开始），不指定则从文件开头读取。",
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "结束行号（含），不指定则读到文件末尾。",
+                        },
                     },
                     "required": ["path"],
                 },
@@ -51,8 +70,14 @@ class FileSystemToolProvider:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string"},
-                        "content": {"type": "string"},
+                        "path": {
+                            "type": "string",
+                            "description": "文件路径，相对于工作区根目录。例如: output.md",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "要写入文件的完整文本内容。",
+                        },
                     },
                     "required": ["path", "content"],
                 },
@@ -64,10 +89,22 @@ class FileSystemToolProvider:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string"},
-                        "old_text": {"type": "string"},
-                        "new_text": {"type": "string"},
-                        "replace_all": {"type": "boolean"},
+                        "path": {
+                            "type": "string",
+                            "description": "要编辑的文件路径，相对于工作区根目录。",
+                        },
+                        "old_text": {
+                            "type": "string",
+                            "description": "要被替换的原始文本，必须精确匹配文件内容。",
+                        },
+                        "new_text": {
+                            "type": "string",
+                            "description": "用于替换的新文本。",
+                        },
+                        "replace_all": {
+                            "type": "boolean",
+                            "description": "是否替换所有匹配项，默认为 false（仅替换首个）。",
+                        },
                     },
                     "required": ["path", "old_text", "new_text"],
                 },

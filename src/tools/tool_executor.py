@@ -11,6 +11,27 @@ from src.core_contracts.tools_contracts import (
 from src.tools.tool_registry import ToolRegistry
 
 
+def _missing_required(parameters: dict, arguments: dict) -> list[str]:
+    """校验 required 参数是否全部存在。"""
+    required: list[str] = parameters.get("required", [])
+    return [key for key in required if key not in arguments]
+
+
+def _describe_missing(parameters: dict, missing: list[str]) -> str:
+    """为缺失的必填参数生成带类型和描述的可读说明。"""
+    properties = parameters.get("properties", {})
+    lines: list[str] = []
+    for name in missing:
+        prop = properties.get(name, {})
+        ptype = prop.get("type", "string")
+        desc = prop.get("description", "")
+        detail = f"{name} ({ptype})"
+        if desc:
+            detail += f": {desc}"
+        lines.append(f"  - {detail}")
+    return "\n".join(lines)
+
+
 @dataclass(frozen=True)
 class ToolExecutor:
     """工具执行调度器。"""
@@ -20,6 +41,15 @@ class ToolExecutor:
         tool = tool_registry.get(request.tool_name)
         if tool is None:
             return self._unknown_tool_result(request.tool_name)
+
+        missing = _missing_required(tool.parameters, request.arguments)
+        if missing:
+            detail = _describe_missing(tool.parameters, missing)
+            return self._failure_result(
+                name=request.tool_name,
+                exc=ValueError(f"Missing required arguments: {', '.join(missing)}.\n{detail}\nPlease retry with the required arguments."),
+                error_kind="missing_arguments",
+            )
 
         try:
             return tool.handler(request)

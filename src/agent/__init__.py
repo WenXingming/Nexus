@@ -2,14 +2,41 @@
 
 from src.agent.agent_executor import AgentLoopExecutor
 from src.agent.agent_gateway import AgentGateway
-from src.agent.slash_commands import SlashCommandRegistry
+from src.agent.conversation_orchestrator import ConversationOrchestrator
+from src.agent.slash_commands import SlashCommandRegistry, build_default_slash_command_specs
 from src.client import ClientGateway
 from src.context import ContextGateway
 from src.core_contracts.context_contracts import BudgetConfig, ContextPolicy, PreModelBudgetGuard
+from src.core_contracts.model_config import ModelConfig
+from src.core_contracts.workspace_config import WorkspaceConfig
 from src.interaction import InteractionGateway
 from src.rag import RagGateway
 from src.session import SessionGateway
 from src.tools import ToolsGateway
+
+
+def create_conversation_orchestrator(
+    *,
+    interaction_gateway: InteractionGateway,
+    agent_gateway: AgentGateway,
+    session_gateway: SessionGateway,
+    tools_gateway: ToolsGateway,
+    budget_config: BudgetConfig,
+    context_policy: ContextPolicy,
+    model_config: ModelConfig,
+    workspace_config: WorkspaceConfig,
+) -> ConversationOrchestrator:
+    """创建 ConversationOrchestrator 的工厂函数。"""
+    return ConversationOrchestrator(
+        interaction_gateway=interaction_gateway,
+        agent_gateway=agent_gateway,
+        session_gateway=session_gateway,
+        tools_gateway=tools_gateway,
+        budget_config=budget_config,
+        context_policy=context_policy,
+        model_config=model_config,
+        workspace_config=workspace_config,
+    )
 
 
 def create_gateway(
@@ -45,9 +72,8 @@ def create_gateway(
         context_gateway=context_gateway,
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
+        client_gateway=client,
     ).get_specs()
-
-    interaction_gateway.register_slash_commands(slash_command_specs)
 
     executor = AgentLoopExecutor(
         client=client,
@@ -75,4 +101,9 @@ def create_gateway(
     )
 
 
-__all__ = ['create_gateway']
+__all__ = [
+    'ConversationOrchestrator',
+    'build_default_slash_command_specs',
+    'create_conversation_orchestrator',
+    'create_gateway',
+]

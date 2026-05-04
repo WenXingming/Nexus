@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 from src.core_contracts.model_contracts import Message
+from src.core_contracts.context_contracts import BudgetProjection
 
 
 _CHARS_PER_TOKEN: int = 4
@@ -106,6 +107,51 @@ class TokenEstimator:
         if not tools:
             return 0
         return self._count_chars(json.dumps(tools, ensure_ascii=False))
+
+    def project_budget(
+        self,
+        messages: list[Message],
+        *,
+        tools: list[dict] | None = None,
+        max_input_tokens: int | None = None,
+        output_reserve_tokens: int = 4_096,
+        soft_buffer_tokens: int = 13_000,
+    ) -> BudgetProjection:
+        """预检本次模型调用的 token 预算并返回快照。
+
+        Args:
+            messages (list[Message]): 当前会话消息列表。
+            tools (list[dict] | None): 当前工具 schema 列表；None 等同于空列表。
+            max_input_tokens (int | None): 输入 token 硬上限；None 表示不设限。
+            output_reserve_tokens (int): 输出预留 token 数，默认 4096。
+            soft_buffer_tokens (int): 软缓冲 token 数，默认 13000。
+        Returns:
+            BudgetProjection: 本次调用的预算快照，含 projected/hard/soft 及 over 标记。
+        Raises:
+            无。
+        """
+        projected = self.estimate_messages(messages) + self.estimate_tools(tools or [])
+
+        if max_input_tokens is None:
+            return BudgetProjection(
+                projected_input_tokens=projected,
+                output_reserve_tokens=output_reserve_tokens,
+                hard_input_limit=None,
+                soft_input_limit=None,
+                is_hard_over=False,
+                is_soft_over=False,
+            )
+
+        usable = max_input_tokens - output_reserve_tokens
+        soft_limit = max(0, usable - soft_buffer_tokens)
+        return BudgetProjection(
+            projected_input_tokens=projected,
+            output_reserve_tokens=output_reserve_tokens,
+            hard_input_limit=max_input_tokens,
+            soft_input_limit=soft_limit,
+            is_hard_over=projected > usable,
+            is_soft_over=projected > soft_limit,
+        )
 
     # =========================================================================
     # 私有辅助（原子步骤）

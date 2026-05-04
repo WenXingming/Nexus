@@ -18,22 +18,15 @@ from src.core_contracts.tools_contracts import (
     ToolExecutionResult,
 )
 from src.core_contracts.rag_contracts import (
-    EmbeddingProvider,  # noqa: F401 – re-exported
-    RagModelClient,
     RagDocument,
     RagChunk,
+    RagEmbedding,
     RagRetrievedChunk,
     RagIndexRequest,
     RagIndexResult,
     RagRetrieveRequest,
     RagRetrieveResult,
-    RagQueryRequest,
-    RagQueryResult,
     RagError,
-    RagIndexError,
-    RagRetrieveError,
-    RagQueryError,
-    RagCollectionNotFoundError,
 )
 from src.core_contracts.context_contracts import (
     BudgetConfig,
@@ -63,6 +56,7 @@ from src.core_contracts.interaction_contracts import (
     SlashCommandResolution,
     SlashDispatcher,
 )
+from src.core_contracts.workspace_config import WorkspaceConfig
 
 __all__ = [
     "Message",
@@ -80,22 +74,15 @@ __all__ = [
     "ToolExecutionRequest",
     "McpRequest",
     "McpToolConfig",
-    "EmbeddingProvider",
-    "RagModelClient",
     "RagDocument",
     "RagChunk",
+    "RagEmbedding",
     "RagRetrievedChunk",
     "RagIndexRequest",
     "RagIndexResult",
     "RagRetrieveRequest",
     "RagRetrieveResult",
-    "RagQueryRequest",
-    "RagQueryResult",
     "RagError",
-    "RagIndexError",
-    "RagRetrieveError",
-    "RagQueryError",
-    "RagCollectionNotFoundError",
     "BudgetConfig",
     "ContextPolicy",
     "BudgetProjection",
@@ -120,4 +107,5 @@ __all__ = [
     "SlashCommandSpec",
     "SlashCommandResolution",
     "SlashDispatcher",
+    "WorkspaceConfig",
 ]

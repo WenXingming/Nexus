@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.core_contracts.rag_contracts import RagDocument, RagIndexError
-from src.rag.chunker import DocumentChunker
+from src.core_contracts.rag_contracts import RagDocument, RagError
+from src.rag.document_chunker import DocumentChunker
 
 
 # =============================================================================
@@ -36,19 +36,19 @@ def simple_doc() -> RagDocument:
 
 class TestChunkValidation:
     def test_raises_when_chunk_size_is_zero(self, chunker: DocumentChunker, simple_doc: RagDocument) -> None:
-        with pytest.raises(RagIndexError, match='chunk_size'):
+        with pytest.raises(RagError, match='chunk_size'):
             chunker.chunk(simple_doc, chunk_size=0, chunk_overlap=0)
 
     def test_raises_when_chunk_size_is_negative(self, chunker: DocumentChunker, simple_doc: RagDocument) -> None:
-        with pytest.raises(RagIndexError, match='chunk_size'):
+        with pytest.raises(RagError, match='chunk_size'):
             chunker.chunk(simple_doc, chunk_size=-1, chunk_overlap=0)
 
     def test_raises_when_overlap_equals_chunk_size(self, chunker: DocumentChunker, simple_doc: RagDocument) -> None:
-        with pytest.raises(RagIndexError, match='chunk_overlap'):
+        with pytest.raises(RagError, match='chunk_overlap'):
             chunker.chunk(simple_doc, chunk_size=10, chunk_overlap=10)
 
     def test_raises_when_overlap_exceeds_chunk_size(self, chunker: DocumentChunker, simple_doc: RagDocument) -> None:
-        with pytest.raises(RagIndexError, match='chunk_overlap'):
+        with pytest.raises(RagError, match='chunk_overlap'):
             chunker.chunk(simple_doc, chunk_size=10, chunk_overlap=15)
 
 

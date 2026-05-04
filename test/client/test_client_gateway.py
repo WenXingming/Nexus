@@ -172,7 +172,7 @@ class TestChatSuccess:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "test-model"          # 回退到 config.model_name
         assert kwargs["temperature"] == 0.7             # 回退到 config.temperature
-        assert kwargs["max_tokens"] == 1024             # 回退到 config.max_tokens
+        assert kwargs["max_tokens"] == 1_000_000             # 回退到 config.max_tokens
 
 
 # =============================================================================
@@ -380,7 +380,7 @@ class TestChatStreamSuccess:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "test-model"
         assert kwargs["temperature"] == 0.7
-        assert kwargs["max_tokens"] == 1024
+        assert kwargs["max_tokens"] == 1_000_000
 
 
 # =============================================================================
