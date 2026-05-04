@@ -12,16 +12,7 @@ from pathlib import Path
 from src.core_contracts.rag_contracts import RagDocument
 
 
-class DocumentLoader:
-    """从文件系统读取文本资料并转换为 RagDocument 契约。
-
-    load() 是唯一流程入口，所有私有方法均为其直接子步骤，
-    私有方法间禁止互相调用。
-
-    遵循无状态设计：实例化后不持有任何可变状态，可安全复用。
-    """
-
-    _SUPPORTED_SUFFIXES: frozenset[str] = frozenset(
+_SUPPORTED_SUFFIXES: frozenset[str] = frozenset(
         {
             ".pdf",
             ".md",
@@ -59,6 +50,16 @@ class DocumentLoader:
             ".pptx",
         }
     )
+
+
+class DocumentLoader:
+    """从文件系统读取文本资料并转换为 RagDocument 契约。
+
+    load() 是唯一流程入口，所有私有方法均为其直接子步骤，
+    私有方法间禁止互相调用。
+
+    遵循无状态设计：实例化后不持有任何可变状态，可安全复用。
+    """
 
     def __init__(self) -> None:
         """初始化文档加载器，不持有可变状态。"""
@@ -125,7 +126,7 @@ class DocumentLoader:
             return [path]
         return sorted(
             child for child in path.rglob("*")
-            if child.is_file() and child.suffix.lower() in self._SUPPORTED_SUFFIXES
+            if child.is_file() and child.suffix.lower() in _SUPPORTED_SUFFIXES
         )
 
     def _read_content(self, path: Path) -> str:

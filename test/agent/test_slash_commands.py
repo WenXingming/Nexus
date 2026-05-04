@@ -34,11 +34,13 @@ def _dispatch(
     context_gateway: object | None = None,
     session_gateway: object | None = None,
     rag_gateway: object | None = None,
+    client_gateway: object | None = None,
 ):
     specs = build_default_slash_command_specs(
         context_gateway=context_gateway,
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
+        client_gateway=client_gateway,
     )
     dispatcher = SlashCommandDispatcher(specs=specs)
     return dispatcher.dispatch_slash_command(context or _make_context(), input_text)
@@ -80,7 +82,7 @@ class TestSessionCommands:
 class TestRagCommands:
     def test_rag_index_passes_source_path_to_rag_gateway(self) -> None:
         rag_gateway = MagicMock()
-        rag_gateway.index_documents.return_value = MagicMock(
+        rag_gateway.index.return_value = MagicMock(
             collection_name='main-loop',
             docs_indexed=1,
             chunks_created=2,
@@ -88,16 +90,21 @@ class TestRagCommands:
 
         result = _dispatch('/rag-index docs', rag_gateway=rag_gateway)
 
-        rag_gateway.index_documents.assert_called_once()
-        request = rag_gateway.index_documents.call_args.args[0]
+        rag_gateway.index.assert_called_once()
+        request = rag_gateway.index.call_args.args[0]
         assert request.source_path == 'docs'
         assert request.documents == ()
         assert 'collection=main-loop' in result.output
 
     def test_rag_ask_updates_session_and_returns_answer(self) -> None:
         session_gateway = MagicMock()
+        client_gateway = MagicMock()
         rag_gateway = MagicMock()
-        rag_gateway.query.return_value = MagicMock(answer='检索增强生成。')
+        rag_gateway.retrieve_and_build_messages.return_value = [
+            MagicMock(role='system', content='sys'),
+            MagicMock(role='user', content='query'),
+        ]
+        client_gateway.chat.return_value = MagicMock(content='检索增强生成。')
         context = _make_context(SessionState(session_id='sess-1'))
 
         result = _dispatch(
@@ -105,6 +112,7 @@ class TestRagCommands:
             context=context,
             session_gateway=session_gateway,
             rag_gateway=rag_gateway,
+            client_gateway=client_gateway,
         )
 
         session_gateway.append_user.assert_called_once()
