@@ -1,0 +1,20 @@
+# vscode settings
+.vscode/
+
+# claude settings
+.claude/
+
+# python cache
+__pycache__/
+
+# ruff cache
+.ruff_cache
+
+# pytest cache
+.pytest_cache/
+
+# session files
+.nexus/
+
+# other files
+backup/
