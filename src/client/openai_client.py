@@ -11,6 +11,9 @@ OpenAI 协议适配层。
 """
 
 from collections.abc import Iterator
+import json
+import re
+import sys
 
 import openai
 from openai import OpenAI
@@ -186,29 +189,45 @@ class OpenAIClient:
         )
 
     def _parse_tool_calls(self, message: object) -> list[dict] | None:
-        """从 OpenAI message 对象中提取 tool_calls 列表。
-
-        Args:
-            message: OpenAI completion choice 中的 message 对象。
-
-        Returns:
-            list[dict] | None: 工具调用列表，每项包含 id / type / function 字段；
-            message 不包含 tool_calls 时返回 None。
-        """
+        """从 OpenAI message 对象中提取 tool_calls 列表。"""
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
             return None
-        return [
-            {
+        result = []
+        for tc in tool_calls:
+            arguments_str = tc.function.arguments
+            try:
+                json.loads(arguments_str)
+            except (json.JSONDecodeError, TypeError):
+                original = arguments_str
+                if arguments_str is None or not isinstance(arguments_str, str):
+                    arguments_str = "{}"
+                else:
+                    json_match = re.search(r'\{.*\}', arguments_str, re.DOTALL)
+                    if json_match:
+                        try:
+                            json.loads(json_match.group())
+                            arguments_str = json_match.group()
+                        except json.JSONDecodeError:
+                            arguments_str = "{}"
+                    else:
+                        arguments_str = "{}"
+                if arguments_str == "{}":
+                    snippet = str(original)[:200] if original else "(empty)"
+                    print(
+                        f"\n[解析警告] 工具 {tc.function.name} 的 arguments JSON 无效，已回退为 {{}}。"
+                        f" 原始内容前 200 字符: {snippet}",
+                        file=sys.stderr,
+                    )
+            result.append({
                 "id": tc.id,
                 "type": tc.type,
                 "function": {
                     "name": tc.function.name,
-                    "arguments": tc.function.arguments,
+                    "arguments": arguments_str,
                 },
-            }
-            for tc in tool_calls
-        ]
+            })
+        return result
 
     def _extract_usage(self, completion: object) -> TokenUsage:
         usage = getattr(completion, "usage", None)

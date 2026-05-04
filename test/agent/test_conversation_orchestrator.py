@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.agent.conversation_orchestrator import ConversationOrchestrator
@@ -9,6 +10,7 @@ from src.core_contracts.context_contracts import BudgetConfig, ContextPolicy
 from src.core_contracts.interaction_contracts import SlashCommandContext, SlashCommandResult
 from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.session_contracts import SessionState
+from src.core_contracts.workspace_config import WorkspaceConfig
 
 
 def _make_orchestrator() -> ConversationOrchestrator:
@@ -25,7 +27,7 @@ def _make_orchestrator() -> ConversationOrchestrator:
         budget_config=BudgetConfig(),
         context_policy=ContextPolicy(),
         model_config=ModelConfig(api_key='sk-test'),
-        workspace_path='D:/WorkSpace/Nexus',
+        workspace_config=WorkspaceConfig.from_cwd(),
         session_id_factory=lambda: 'forked-session',
     )
 

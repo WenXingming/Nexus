@@ -15,6 +15,7 @@ from src.core_contracts.interaction_contracts import (
 )
 from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.session_contracts import SessionState
+from src.core_contracts.workspace_config import WorkspaceConfig
 from src.interaction import InteractionGateway
 from src.session import SessionGateway
 from src.tools import ToolsGateway
@@ -36,7 +37,7 @@ class ConversationOrchestrator:
     budget_config: BudgetConfig
     context_policy: ContextPolicy
     model_config: ModelConfig
-    workspace_path: str
+    workspace_config: WorkspaceConfig
     session_id_factory: Callable[[], str] = _new_session_id
 
     def run(self, state: SessionState) -> SessionState:
@@ -103,7 +104,7 @@ class ConversationOrchestrator:
             session_id=state.session_id,
             turns_offset=max(len(state.transcript_entries) - 1, 0),
             tool_call_count=tool_call_count,
-            workspace_path=self.workspace_path,
+            workspace_path=str(self.workspace_config.root),
             context_policy=self.context_policy,
             permissions=permission_policy,
             budget_config=self.budget_config,

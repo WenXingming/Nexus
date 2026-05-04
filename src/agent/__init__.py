@@ -8,6 +8,7 @@ from src.client import ClientGateway
 from src.context import ContextGateway
 from src.core_contracts.context_contracts import BudgetConfig, ContextPolicy, PreModelBudgetGuard
 from src.core_contracts.model_config import ModelConfig
+from src.core_contracts.workspace_config import WorkspaceConfig
 from src.interaction import InteractionGateway
 from src.rag import RagGateway
 from src.session import SessionGateway
@@ -23,7 +24,7 @@ def create_conversation_orchestrator(
     budget_config: BudgetConfig,
     context_policy: ContextPolicy,
     model_config: ModelConfig,
-    workspace_path: str,
+    workspace_config: WorkspaceConfig,
 ) -> ConversationOrchestrator:
     """创建 ConversationOrchestrator 的工厂函数。"""
     return ConversationOrchestrator(
@@ -34,7 +35,7 @@ def create_conversation_orchestrator(
         budget_config=budget_config,
         context_policy=context_policy,
         model_config=model_config,
-        workspace_path=workspace_path,
+        workspace_config=workspace_config,
     )
 
 
@@ -73,8 +74,6 @@ def create_gateway(
         rag_gateway=rag_gateway,
         client_gateway=client,
     ).get_specs()
-
-    interaction_gateway.register_slash_commands(slash_command_specs)
 
     executor = AgentLoopExecutor(
         client=client,

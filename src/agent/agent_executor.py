@@ -129,6 +129,13 @@ class AgentLoopExecutor:
             if result is None:
                 break
 
+            if result.finish_reason == "length":
+                print(
+                    f"\n[警告] LLM 响应因 max_tokens 限制被截断 (finish_reason=length)。"
+                    f" 当前 max_tokens 可能不足以容纳工具调用参数。",
+                    file=sys.stderr,
+                )
+
             if not result.tool_calls:
                 self.session_gateway.append_assistant(state, result.content)
                 print(f"\nAgent> {result.content}")

@@ -81,6 +81,39 @@ class SessionGateway:
         """
         return self._session_store.load(session_id)
 
+    def save_state(
+        self,
+        state: SessionState,
+        model_config: ModelConfig,
+        usage: TokenUsage | None = None,
+        last_response: str = "",
+        metadata: JsonDict | None = None,
+    ) -> tuple[str, str]:
+        """将运行态状态转换为快照并保存。
+
+        Args:
+            state (SessionState): 当前运行态状态。
+            model_config (ModelConfig): 当前模型配置。
+            usage (TokenUsage | None): Token 统计；None 时使用零值。
+            last_response (str): 最后一轮助手输出。
+            metadata (JsonDict | None): 扩展元数据。
+        Returns:
+            tuple[str, str]: (session_id, session_path)。
+        Raises:
+            ValueError: session_id 非法时抛出。
+            RuntimeError: 转换或保存失败时抛出。
+        """
+        snapshot = self._session_state.to_snapshot(
+            state=state,
+            session_id=state.session_id,
+            model_config=model_config,
+            usage=usage,
+            last_response=last_response,
+            metadata=metadata,
+        )
+        session_path = self._session_store.save(snapshot)
+        return state.session_id, str(session_path)
+    
     def create_state(self, prompt: str) -> SessionState:
         """创建全新运行态会话状态。
 
@@ -138,6 +171,19 @@ class SessionGateway:
         """
         self._session_state.append_assistant(state, content)
 
+    def append_system(self, state: SessionState, content: str) -> None:
+        """向运行态状态追加一条系统消息。
+
+        Args:
+            state (SessionState): 目标会话状态。
+            content (str): 系统提示内容。
+        Returns:
+            None
+        Raises:
+            None
+        """
+        self._session_state.append_message(state, Message(role="system", content=content))
+
     def append_message(self, state: SessionState, message: Message) -> None:
         """向运行态状态追加一条任意角色的消息。
 
@@ -150,36 +196,3 @@ class SessionGateway:
             ValueError: message 不合法时抛出。
         """
         self._session_state.append_message(state, message)
-
-    def save_state(
-        self,
-        state: SessionState,
-        model_config: ModelConfig,
-        usage: TokenUsage | None = None,
-        last_response: str = "",
-        metadata: JsonDict | None = None,
-    ) -> tuple[str, str]:
-        """将运行态状态转换为快照并保存。
-
-        Args:
-            state (SessionState): 当前运行态状态。
-            model_config (ModelConfig): 当前模型配置。
-            usage (TokenUsage | None): Token 统计；None 时使用零值。
-            last_response (str): 最后一轮助手输出。
-            metadata (JsonDict | None): 扩展元数据。
-        Returns:
-            tuple[str, str]: (session_id, session_path)。
-        Raises:
-            ValueError: session_id 非法时抛出。
-            RuntimeError: 转换或保存失败时抛出。
-        """
-        snapshot = self._session_state.to_snapshot(
-            state=state,
-            session_id=state.session_id,
-            model_config=model_config,
-            usage=usage,
-            last_response=last_response,
-            metadata=metadata,
-        )
-        session_path = self._session_store.save(snapshot)
-        return state.session_id, str(session_path)

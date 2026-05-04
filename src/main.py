@@ -30,6 +30,7 @@ from src.core_contracts.context_contracts import (
 from src.core_contracts.model_config import ModelConfig, RagModelConfig
 from src.core_contracts.session_contracts import SessionState
 from src.core_contracts.tools_contracts import McpToolConfig
+from src.core_contracts.workspace_config import WorkspaceConfig
 from src.rag import RagGateway, build_rag_gateway
 from src.session import SessionGateway, create_gateway as create_session_gateway
 from src.tools import create_gateway as create_tools_gateway
@@ -68,6 +69,7 @@ class Application:
         self._context_policy: ContextPolicy | None = None  # 上下文治理策略
         self._budget_guard: PreModelBudgetGuard | None = None  # 预算守卫
         self._mcp_config = McpToolConfig()  # MCP 工具装配契约由组合根持有。
+        self._workspace_config: WorkspaceConfig | None = None  # 工作空间配置
 
     # ---- 唯一流程入口 (Single Orchestrator) ----
 
@@ -89,8 +91,14 @@ class Application:
 
         if self._conversation_orchestrator is None:
             raise RuntimeError("Conversation orchestrator 尚未初始化。")
-        self._conversation_orchestrator.run(state)
-
+        
+        try:
+            final_state = self._conversation_orchestrator.run(state)
+        except KeyboardInterrupt:
+            print("\n[中断] 用户取消操作", file=sys.stderr)
+            final_state = state
+        
+        self._save_session(final_state)
         self._render_exit()
         return 0
 
@@ -110,6 +118,7 @@ class Application:
         Raises:
             RuntimeError: 网关创建失败时抛出。
         """
+        self._workspace_config = WorkspaceConfig.from_cwd()
         self._client = create_llm_gateway(config=self._config)
         self._context_gateway = create_context_gateway(client=self._client)
         self._session_gateway = create_session_gateway()
@@ -152,7 +161,7 @@ class Application:
             budget_config=self._budget_config,
             context_policy=self._context_policy,
             model_config=self._config,
-            workspace_path=str(Path.cwd()),
+            workspace_config=self._workspace_config,
         )
 
     def _init_session(self) -> SessionState:
@@ -163,11 +172,32 @@ class Application:
         """
         self._interaction_gateway.render_startup()
         print(f"已加载 {len(self._tools_gateway.list_tools())} 个工具")
-        print("命令: /new | /save | /load <id> | /rag-index <path> | /rag-ask <question> | /quit")
+        print(f"工作目录: {self._workspace_config.root}")
         state = self._session_gateway.create_state("新会话已创建")
         self._interaction_gateway.start_session_tracker(state.session_id)
         print(f"[会话已创建] session_id={state.session_id}")
         return state
+
+    def _save_session(self, state: SessionState) -> None:
+        """保存当前会话状态。
+
+        Args:
+            state (SessionState): 待保存的会话状态。
+        Returns:
+            None
+        Raises:
+            None
+        """
+        if state is None or self._session_gateway is None or self._config is None:
+            return
+        try:
+            session_id, session_path = self._session_gateway.save_state(
+                state=state,
+                model_config=self._config,
+            )
+            print(f"[会话已保存] session_id={session_id}")
+        except Exception as e:
+            print(f"[保存失败] {e}", file=sys.stderr)
 
     def _render_exit(self) -> None:
         """渲染退出界面。"""

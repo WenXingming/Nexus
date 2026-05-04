@@ -25,6 +25,7 @@ from src.core_contracts.rag_contracts import (
     RagRetrievedChunk,
 )
 from src.rag.rag_gateway import RagGateway
+from src.rag.prompt_builder import PromptBuilder
 
 
 # =============================================================================
@@ -82,6 +83,16 @@ def mock_document_loader() -> MagicMock:
 
 
 @pytest.fixture
+def mock_prompt_builder() -> MagicMock:
+    builder = MagicMock()
+    builder.build_messages.return_value = [
+        Message(role='system', content='system prompt'),
+        Message(role='user', content='user query'),
+    ]
+    return builder
+
+
+@pytest.fixture
 def gateway(
     mock_embedding_provider: MagicMock,
     mock_chunker: MagicMock,
@@ -93,6 +104,7 @@ def gateway(
         chunker=mock_chunker,
         vector_store=mock_vector_store,
         document_loader=mock_document_loader,
+        prompt_builder=PromptBuilder(),
     )
 
 
