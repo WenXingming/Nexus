@@ -107,6 +107,28 @@ class ContextGateway:
         cfg = budget_config or BudgetConfig()
         return self._project_budget(messages, cfg, tools or [])
 
+    def compact_messages(
+        self,
+        messages: list[Message],
+        *,
+        preserve_messages: int = 4,
+    ) -> CompactionResult:
+        """手动触发 context compact。
+
+        供 /compact 等用户命令调用，将旧对话历史压缩为摘要。
+
+        Args:
+            messages (list[Message]): 当前会话消息列表（就地修改）。
+            preserve_messages (int): 尾部保留不参与压缩的消息条数。
+        Returns:
+            CompactionResult: compact 执行结果。
+        Raises:
+            无。
+        """
+        if self._compactor is None:
+            return CompactionResult(compacted=False, error="Compactor not available")
+        return self._compactor.compact(messages, preserve_messages=preserve_messages)
+
     def run_pre_model_cycle(
         self,
         *,

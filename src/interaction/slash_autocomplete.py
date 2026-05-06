@@ -206,7 +206,7 @@ class SlashAutocompletePrompt:
         return PromptSession(
             completer=_PromptToolkitSlashAutocompleteCompleter(self._catalog),
             complete_while_typing=True,
-            reserve_space_for_menu=8,
+            reserve_space_for_menu=15,
             complete_style=CompleteStyle.COLUMN,
             style=self._build_prompt_style(),
             include_default_pygments_style=False,
