@@ -49,7 +49,6 @@ def create_gateway(
     budget_config: BudgetConfig,
     context_policy: ContextPolicy,
     budget_guard: PreModelBudgetGuard,
-    tools: list[dict],
     rag_gateway: RagGateway | None = None,
 ) -> AgentGateway:
     """创建 AgentGateway 的工厂函数。
@@ -63,7 +62,6 @@ def create_gateway(
         budget_config: Token 预算配置
         context_policy: 上下文治理策略
         budget_guard: 预算守卫
-        tools: OpenAI 格式的工具定义列表
         rag_gateway: RAG 网关，用于 slash 命令
     Returns:
         AgentGateway: 创建的网关实例
@@ -73,6 +71,7 @@ def create_gateway(
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
         client_gateway=client,
+        tools_gateway=tools_gateway,
     ).get_specs()
 
     executor = AgentLoopExecutor(
@@ -84,7 +83,6 @@ def create_gateway(
         budget_config=budget_config,
         context_policy=context_policy,
         budget_guard=budget_guard,
-        tools=tools,
     )
 
     return AgentGateway(
@@ -96,7 +94,6 @@ def create_gateway(
         budget_config=budget_config,
         context_policy=context_policy,
         budget_guard=budget_guard,
-        tools=tools,
         executor=executor,
     )
 

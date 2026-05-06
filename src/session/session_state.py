@@ -15,6 +15,11 @@ from __future__ import annotations
 import uuid
 
 from src.core_contracts.model_config import ModelConfig
+
+
+def generate_session_id() -> str:
+    """Generate a new unique session identifier."""
+    return uuid.uuid4().hex[:32]
 from src.core_contracts.model_contracts import Message, TokenUsage
 from src.core_contracts.session_contracts import (
     JsonDict,
@@ -54,7 +59,7 @@ class SessionStateRuntime:
             ValueError: prompt 非法时抛出。
         """
         normalized_prompt = self._validate_prompt(prompt)
-        session_id = uuid.uuid4().hex[:32]
+        session_id = generate_session_id()
         state = SessionState(session_id=session_id)
         self.append_user(state, normalized_prompt)
         return state

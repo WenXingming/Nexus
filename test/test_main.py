@@ -44,9 +44,6 @@ class TestApplicationDependencies:
         interaction_gateway = MagicMock()
         agent_gateway = MagicMock()
         conversation_orchestrator = MagicMock()
-        tool = MagicMock()
-        tool.to_openai_tool.return_value = {"type": "function", "function": {"name": "ls"}}
-        tools_gateway.list_tools.return_value = [tool]
         rag_gateway = MagicMock()
 
         app = main_module.Application()
@@ -71,7 +68,6 @@ class TestApplicationDependencies:
         assert app._interaction_gateway is interaction_gateway
         assert app._agent_gateway is agent_gateway
         assert app._conversation_orchestrator is conversation_orchestrator
-        assert app._tools == [{"type": "function", "function": {"name": "ls"}}]
         assert app._budget_config.output_reserve_tokens == 2048
         assert app._budget_config.soft_buffer_tokens == 13_000
         assert app._context_policy.compact_preserve_messages == 4

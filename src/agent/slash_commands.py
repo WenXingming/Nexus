@@ -6,7 +6,7 @@ SlashCommandSpec，并由组合根注入 InteractionGateway。
 
 from __future__ import annotations
 
-from src.context.context_gateway import ContextGateway
+from src.context import ContextGateway
 from src.core_contracts.interaction_contracts import (
     ParsedSlashCommand,
     SlashCommandContext,
@@ -31,6 +31,7 @@ def build_default_slash_command_specs(
     session_gateway: SessionGateway | None = None,
     rag_gateway: RagGateway | None = None,
     client_gateway = None,
+    tools_gateway = None,
 ) -> tuple[SlashCommandSpec, ...]:
     """构造应用默认的 slash 命令规格列表。"""
     registry = SlashCommandRegistry(
@@ -38,6 +39,7 @@ def build_default_slash_command_specs(
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
         client_gateway=client_gateway,
+        tools_gateway=tools_gateway,
     )
     return registry.get_specs()
 
@@ -58,11 +60,13 @@ class SlashCommandRegistry:
         session_gateway: SessionGateway | None = None,
         rag_gateway: RagGateway | None = None,
         client_gateway = None,
+        tools_gateway = None,
     ):
         self._context_gateway = context_gateway
         self._session_gateway = session_gateway
         self._rag_gateway = rag_gateway
         self._client_gateway = client_gateway
+        self._tools_gateway = tools_gateway
         self._specs = self._register_commands()
 
     def get_specs(self) -> tuple[SlashCommandSpec, ...]:
@@ -93,9 +97,9 @@ class SlashCommandRegistry:
                 handler=self._handle_permissions,
             ),
             SlashCommandSpec(
-                names=('tools',),
-                description='List registered local tools.',
-                handler=self._handle_tools,
+                names=('mcp',),
+                description='List connected MCP servers or show tools for a specific server.',
+                handler=self._handle_mcp,
             ),
             SlashCommandSpec(
                 names=('clear',),
@@ -131,6 +135,11 @@ class SlashCommandRegistry:
                 names=('rag-ask',),
                 description='Query RAG collection with retrieval-augmented generation.',
                 handler=self._handle_rag_ask,
+            ),
+            SlashCommandSpec(
+                names=('compact',),
+                description='Manually trigger context compression.',
+                handler=self._handle_compact,
             ),
         )
 
@@ -238,28 +247,87 @@ class SlashCommandRegistry:
             output='\n'.join(lines),
         )
 
-    def _handle_tools(
+    def _handle_mcp(
         self,
         context: SlashCommandContext,
         parsed: ParsedSlashCommand,
     ) -> SlashCommandResult:
-        del parsed
-        permissions = context.permissions
-        lines = [
-            'Registered Tools',
-            '================',
-            f'File write enabled: {self._render_bool(permissions.allow_file_write)}',
-            f'Shell enabled: {self._render_bool(permissions.allow_shell_commands)}',
-            '',
-        ]
-        for tool in context.tool_registry:
-            lines.append(f'{tool.name} - {tool.description}')
-        if context.plugin_summary.strip():
-            lines.extend(['', context.plugin_summary.strip()])
+        del context
+        server_name = parsed.arguments.strip()
+        if server_name:
+            return self._handle_mcp_server_detail(server_name)
+        return self._handle_mcp_server_list()
+
+    def _handle_mcp_server_list(self) -> SlashCommandResult:
+        if self._tools_gateway is None:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='mcp',
+                output='MCP gateway not available.',
+                metadata={'error': 'tools_gateway_missing'},
+            )
+
+        summaries = self._tools_gateway.get_mcp_server_summaries()
+        if not summaries:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='mcp',
+                output='No MCP servers configured.',
+            )
+
+        lines = ['MCP Servers', '===========', '']
+        for s in summaries:
+            status = 'connected' if s.status == 'connected' else f'error: {s.error_message}'
+            lines.append(f'  {s.name}  ({s.transport})  {s.tool_count} tools  [{status}]')
         return SlashCommandResult(
             handled=True,
             continue_query=False,
-            command_name='tools',
+            command_name='mcp',
+            output='\n'.join(lines),
+        )
+
+    def _handle_mcp_server_detail(self, server_name: str) -> SlashCommandResult:
+        if self._tools_gateway is None:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='mcp',
+                output='MCP gateway not available.',
+                metadata={'error': 'tools_gateway_missing'},
+            )
+
+        summaries = {
+            s.name: s for s in self._tools_gateway.get_mcp_server_summaries()
+        }
+        summary = summaries.get(server_name)
+        if summary is None:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='mcp',
+                output=f'Server not found: {server_name}',
+                metadata={'error': 'server_not_found'},
+            )
+
+        tools = self._tools_gateway.list_tools()
+        server_tools = [t for t in tools if t.server_name == server_name]
+
+        lines = [
+            f'MCP Server: {server_name} ({summary.transport})',
+            '=' * (len(server_name) + len(summary.transport) + 13),
+        ]
+        if summary.status == 'error':
+            lines.append(f'Status: error ({summary.error_message})')
+        lines.append('')
+        for tool in server_tools:
+            lines.append(f'  {tool.name} - {tool.description}')
+        lines.extend(['', f'\x1b[38;2;126;231;238mTotal: {len(server_tools)} tools\x1b[0m'])
+        return SlashCommandResult(
+            handled=True,
+            continue_query=False,
+            command_name='mcp',
             output='\n'.join(lines),
         )
 
@@ -506,6 +574,65 @@ class SlashCommandRegistry:
                 command_name='rag-ask',
                 output=f'[错误] RAG 问答失败: {exc}',
                 metadata={'error': 'query_failed'},
+            )
+
+    def _handle_compact(
+        self,
+        context: SlashCommandContext,
+        parsed: ParsedSlashCommand,
+    ) -> SlashCommandResult:
+        del parsed
+        if self._context_gateway is None:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output=(
+                    'Compact\n'
+                    '=======\n'
+                    'Context gateway not available.\n'
+                    'Provide a ContextGateway when assembling slash command handlers to enable this command.'
+                ),
+                metadata={'error': 'context_gateway_missing'},
+            )
+
+        messages = context.session_state.messages
+        if not messages:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output='[Compact] No messages to compact.',
+            )
+
+        result = self._context_gateway.compact_messages(
+            messages,
+            preserve_messages=context.context_policy.compact_preserve_messages,
+        )
+
+        if result.compacted:
+            lines = [
+                'Compact',
+                '=======',
+                f'Messages replaced: {result.messages_replaced}',
+                f'Tokens removed: {result.tokens_removed}',
+                f'Pre tokens: {result.pre_tokens}',
+                f'Post tokens: {result.post_tokens}',
+                f'Preserve messages: {result.preserve_messages_used}',
+            ]
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output='\n'.join(lines),
+            )
+        else:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output=f'[Compact] {result.error or "No progress made"}',
+                metadata={'error': 'compact_failed'},
             )
 
     def _render_optional_int(self, value: int | None) -> str:

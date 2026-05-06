@@ -34,24 +34,6 @@ class WorkspaceConfig:
         """
         return cls(root=Path.cwd().resolve())
 
-    @classmethod
-    def from_path(cls, path: str | Path) -> WorkspaceConfig:
-        """从指定路径创建配置。
-
-        Args:
-            path (str | Path): 工作空间根目录路径。
-        Returns:
-            WorkspaceConfig: 基于指定路径的配置实例。
-        Raises:
-            ValueError: 路径不存在或不是目录时抛出。
-        """
-        root = Path(path).resolve()
-        if not root.exists():
-            raise ValueError(f"工作空间路径不存在: {root}")
-        if not root.is_dir():
-            raise ValueError(f"工作空间路径不是目录: {root}")
-        return cls(root=root)
-
     def resolve_path(self, path: str | Path) -> Path:
         """解析相对于工作空间的路径。
 
@@ -80,18 +62,3 @@ class WorkspaceConfig:
             )
         return resolved
 
-    def relative_to_root(self, path: Path) -> str:
-        """获取路径相对于工作空间根目录的显示文本。
-
-        Args:
-            path (Path): 绝对路径。
-        Returns:
-            str: 相对路径文本；如果不在工作空间内则返回绝对路径。
-        Raises:
-            None
-        """
-        try:
-            relative = path.resolve().relative_to(self.root)
-            return str(relative) if str(relative) else "."
-        except ValueError:
-            return str(path)

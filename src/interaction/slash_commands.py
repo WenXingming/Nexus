@@ -34,11 +34,6 @@ class SlashCommandDispatcher:
         self._specs: tuple[SlashCommandSpec, ...] = specs
         self._spec_index = self._build_spec_index(self._specs)
 
-    def load_specs(self, specs: tuple[SlashCommandSpec, ...]) -> None:
-        """从外部加载已装配的 slash 命令规格并重建索引。"""
-        self._specs = specs
-        self._spec_index = self._build_spec_index(specs)
-
     def dispatch_slash_command(
         self,
         context: SlashCommandContext,

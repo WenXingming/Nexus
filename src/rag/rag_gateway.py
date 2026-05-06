@@ -163,14 +163,6 @@ class RagGateway:
             system_override=system_override,
         )
 
-    def drop_collection(self, collection_name: str) -> None:
-        """删除指定名称的向量集合及其全部分块数据。"""
-        self._vector_store.drop(collection_name)
-
-    def list_collections(self) -> list[str]:
-        """列出当前向量存储中所有已建立的集合名称。"""
-        return self._vector_store.list_names()
-    
     # ── 私有辅助方法 ───────────────────────────────────────────────────────
 
     def _chunk_documents(

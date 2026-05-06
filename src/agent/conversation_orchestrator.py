@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 from typing import Callable
 
@@ -17,13 +16,8 @@ from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.session_contracts import SessionState
 from src.core_contracts.workspace_config import WorkspaceConfig
 from src.interaction import InteractionGateway
-from src.session import SessionGateway
+from src.session import SessionGateway, generate_session_id
 from src.tools import ToolsGateway
-
-
-def _new_session_id() -> str:
-    """生成新的会话 ID。"""
-    return uuid.uuid4().hex[:32]
 
 
 @dataclass
@@ -38,7 +32,7 @@ class ConversationOrchestrator:
     context_policy: ContextPolicy
     model_config: ModelConfig
     workspace_config: WorkspaceConfig
-    session_id_factory: Callable[[], str] = _new_session_id
+    session_id_factory: Callable[[], str] = generate_session_id
 
     def run(self, state: SessionState) -> SessionState:
         """运行交互式会话循环，直到收到退出信号。"""

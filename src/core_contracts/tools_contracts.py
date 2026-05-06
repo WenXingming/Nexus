@@ -41,6 +41,7 @@ class ToolDescriptor:
     description: str
     parameters: JsonDict
     handler: ToolHandler
+    server_name: str = ""
 
     def to_openai_tool(self) -> JsonDict:
         """转换为 OpenAI function-calling 工具声明。
@@ -69,12 +70,11 @@ class McpToolConfig:
 
 
 @dataclass(frozen=True)
-class McpRequest:
-    """MCP 查询契约。
+class McpServerSummary:
+    """MCP server status summary."""
 
-    资源查询和能力查询共享同一组过滤参数，统一使用该契约。
-    """
-
-    query: str | None = None
-    server_name: str | None = None
-    limit: int = 100
+    name: str
+    transport: str
+    tool_count: int
+    status: str  # "connected" | "error"
+    error_message: str = ""

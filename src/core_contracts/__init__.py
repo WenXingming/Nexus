@@ -11,7 +11,6 @@ from src.core_contracts.session_contracts import (
     SessionState,
 )
 from src.core_contracts.tools_contracts import (
-    McpRequest,
     McpToolConfig,
     ToolDescriptor,
     ToolExecutionRequest,
@@ -42,7 +41,6 @@ from src.core_contracts.context_contracts import (
 )
 from src.core_contracts.interaction_contracts import (
     JSONDict,
-    WorkspaceScope,
     PermissionPolicy,
     AgentRunResult,
     EnvironmentLoadSummary,
@@ -72,7 +70,6 @@ __all__ = [
     "ToolExecutionResult",
     "ToolDescriptor",
     "ToolExecutionRequest",
-    "McpRequest",
     "McpToolConfig",
     "RagDocument",
     "RagChunk",
@@ -94,7 +91,6 @@ __all__ = [
     "PreModelContextOutcome",
     "ReactiveCompactOutcome",
     "JSONDict",
-    "WorkspaceScope",
     "PermissionPolicy",
     "AgentRunResult",
     "EnvironmentLoadSummary",

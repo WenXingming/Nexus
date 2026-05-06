@@ -13,6 +13,7 @@ import json
 from src.core_contracts.model_contracts import Message
 from src.core_contracts.client_contracts import LlmRequest
 from src.core_contracts.context_contracts import CompactionResult, ContextModelClient
+from src.context._utils import count_system_prefix
 from src.context.token_estimator import TokenEstimator
 
 
@@ -86,7 +87,7 @@ class Compactor:
         Raises:
             无（模型调用异常被捕获并写入 CompactionResult.error）。
         """
-        prefix_count = self._count_system_prefix(messages)
+        prefix_count = count_system_prefix(messages)
         upper_index = self._calculate_upper_index(len(messages), prefix_count, preserve_messages)
 
         if upper_index <= prefix_count:
@@ -157,24 +158,6 @@ class Compactor:
     # =========================================================================
     # 私有辅助（原子步骤）
     # =========================================================================
-
-    def _count_system_prefix(self, messages: list[Message]) -> int:
-        """返回头部连续 system 消息的数量（不参与压缩范围）。
-
-        Args:
-            messages (list[Message]): 完整消息列表。
-        Returns:
-            int: 头部连续 system 消息的条数。
-        Raises:
-            无。
-        """
-        count = 0
-        for message in messages:
-            if message.role == "system":
-                count += 1
-            else:
-                break
-        return count
 
     def _calculate_upper_index(self, total: int, prefix_count: int, preserve_messages: int) -> int:
         """计算压缩范围的上界索引（不含尾部保留消息）。

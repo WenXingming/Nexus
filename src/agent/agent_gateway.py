@@ -52,9 +52,6 @@ class AgentGateway:
     budget_guard: PreModelBudgetGuard
     """PreModelBudgetGuard: 预算守卫。"""
 
-    tools: list[dict]
-    """list[dict]: OpenAI 格式的工具定义列表。"""
-
     executor: AgentLoopExecutor
     """AgentLoopExecutor: 内部执行器实例。"""
 

@@ -25,7 +25,7 @@ from src.core_contracts.tools_contracts import (
 
 
 @dataclass
-class _McpServerConfig:
+class McpServerConfig:
     """单个 MCP 服务器的解析后配置。"""
 
     name: str
@@ -62,7 +62,7 @@ class McpToolProvider:
     # Private helpers — depth-first from build_tools
     # ------------------------------------------------------------------
 
-    def _from_config(self) -> list[_McpServerConfig]:
+    def _from_config(self) -> list[McpServerConfig]:
         """解析 MCP 配置文件，返回服务器配置列表。"""
         path = Path(self.config_path)
         if not path.exists():
@@ -74,10 +74,10 @@ class McpToolProvider:
             raise ValueError(f"配置文件格式错误: {e}") from e
         if not isinstance(config, dict):
             raise ValueError("配置文件必须是 JSON 对象")
-        servers: list[_McpServerConfig] = []
+        servers: list[McpServerConfig] = []
         for name, server_cfg in config.get("mcpServers", {}).items():
             servers.append(
-                _McpServerConfig(
+                McpServerConfig(
                     name=name,
                     transport=server_cfg.get("transport", "stdio"),
                     command=server_cfg.get("command"),
@@ -90,13 +90,13 @@ class McpToolProvider:
             )
         return servers
 
-    def _list_tools(self, server: _McpServerConfig) -> list[JsonDict]:
+    def _list_tools(self, server: McpServerConfig) -> list[JsonDict]:
         """调用 MCP 服务器 tools/list 获取工具列表。"""
         result = self._send_mcp_request(server, "tools/list")
         return list(result.get("tools", []))
 
     def _send_mcp_request(
-        self, server: _McpServerConfig, method: str, params: JsonDict | None = None
+        self, server: McpServerConfig, method: str, params: JsonDict | None = None
     ) -> JsonDict:
         """根据传输类型分发 JSON-RPC 请求。"""
         if server.transport == "stdio":
@@ -104,7 +104,7 @@ class McpToolProvider:
         return self._send_http_request(server, method, params)
 
     def _send_stdio_request(
-        self, server: _McpServerConfig, method: str, params: JsonDict | None = None
+        self, server: McpServerConfig, method: str, params: JsonDict | None = None
     ) -> JsonDict:
         """通过 stdio 子进程发送 JSON-RPC 请求。
 
@@ -168,7 +168,7 @@ class McpToolProvider:
         return response.get("result", {})
 
     def _send_http_request(
-        self, server: _McpServerConfig, method: str, params: JsonDict | None = None
+        self, server: McpServerConfig, method: str, params: JsonDict | None = None
     ) -> JsonDict:
         """通过 HTTP 发送 JSON-RPC 请求。"""
         payload = {
@@ -233,7 +233,7 @@ class McpToolProvider:
         return last_json
 
     def _convert_tool(
-        self, server: _McpServerConfig, tool: JsonDict
+        self, server: McpServerConfig, tool: JsonDict
     ) -> ToolDescriptor:
         """转换单个 MCP 工具为 ToolDescriptor。"""
         return ToolDescriptor(
@@ -241,10 +241,11 @@ class McpToolProvider:
             description=tool.get("description", ""),
             parameters=tool.get("inputSchema", tool.get("parameters", {})),
             handler=self._create_handler(server, tool["name"]),
+            server_name=server.name,
         )
 
     def _create_handler(
-        self, server: _McpServerConfig, tool_name: str
+        self, server: McpServerConfig, tool_name: str
     ) -> ToolHandler:
         """创建 MCP 工具的 handler，闭包捕获 server 和 tool_name。"""
 
@@ -260,7 +261,7 @@ class McpToolProvider:
         return handler
 
     def _call_tool(
-        self, server: _McpServerConfig, name: str, arguments: JsonDict
+        self, server: McpServerConfig, name: str, arguments: JsonDict
     ) -> JsonDict:
         """调用 MCP 工具并返回标准化的结果字典。"""
         mcp_result = self._send_mcp_request(

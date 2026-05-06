@@ -11,6 +11,22 @@ from pathlib import Path
 from src.core_contracts.tools_contracts import JsonDict
 
 
+def truncate_output(text: str, limit: int) -> str:
+    """Truncate text to limit, preserving head and tail."""
+    if len(text) <= limit:
+        return text
+    half = max(1, limit // 2)
+    return f"{text[:half]}\n...[output truncated, total {len(text)} chars]...\n{text[-half:]}"
+
+
+def require_string(arguments: JsonDict, key: str) -> str:
+    """Extract a required string argument, raising ValueError on missing or non-string."""
+    value = arguments.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f'Argument "{key}" must be a string')
+    return value
+
+
 @dataclass(frozen=True)
 class ToolRuntimeContext:
     """工具执行时的运行时上下文，由 ToolExecutionRequest.runtime 反序列化而来。"""

@@ -10,6 +10,7 @@ from __future__ import annotations
 from src.core_contracts.model_contracts import Message
 from src.core_contracts.context_contracts import SnipResult
 from src.context.token_estimator import TokenEstimator
+from src.context._utils import count_system_prefix
 
 
 _TOMBSTONE_MARKER: str = "<system-reminder>\nOlder "
@@ -69,7 +70,7 @@ class Snipper:
         Raises:
             无。
         """
-        prefix_count = self._count_system_prefix(messages)
+        prefix_count = count_system_prefix(messages)
         tail_count = self._calculate_tail(len(messages), prefix_count, preserve_messages)
         upper_index = len(messages) - tail_count
 
@@ -92,24 +93,6 @@ class Snipper:
     # =========================================================================
     # 私有辅助（原子步骤）
     # =========================================================================
-
-    def _count_system_prefix(self, messages: list[Message]) -> int:
-        """返回头部连续 system 消息的数量（不参与剪裁范围）。
-
-        Args:
-            messages (list[Message]): 完整消息列表。
-        Returns:
-            int: 头部连续 system 消息的条数。
-        Raises:
-            无。
-        """
-        count = 0
-        for message in messages:
-            if message.role == "system":
-                count += 1
-            else:
-                break
-        return count
 
     def _calculate_tail(self, total: int, prefix_count: int, preserve_messages: int) -> int:
         """计算尾部保留消息条数（不超过可用消息数）。
