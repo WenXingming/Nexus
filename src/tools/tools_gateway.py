@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from src.core_contracts.tools_contracts import (
     JsonDict,
+    McpServerSummary,
     ToolDescriptor,
     ToolExecutionRequest,
     ToolExecutionResult,
@@ -110,6 +111,29 @@ class ToolsGateway:
 
         tools = self._async_mcp_provider.get_tools(timeout=timeout)
         self._register_mcp_tools(tools)
+
+    def get_mcp_server_summaries(self) -> tuple[McpServerSummary, ...]:
+        """返回所有 MCP 服务器的状态摘要。
+
+        Returns:
+            tuple[McpServerSummary, ...]: 服务器状态摘要列表。
+        """
+        if self._async_mcp_provider is not None:
+            self._try_merge_async_tools()
+            return self._async_mcp_provider.get_server_summaries()
+
+        from collections import defaultdict
+        by_server: dict[str, list[ToolDescriptor]] = defaultdict(list)
+        for tool in self.tool_registry.values():
+            if tool.server_name:
+                by_server[tool.server_name].append(tool)
+        return tuple(
+            McpServerSummary(
+                name=name, transport="unknown",
+                tool_count=len(tools), status="connected",
+            )
+            for name, tools in by_server.items()
+        )
 
     # -------------------------------------------------------------------------
     # Private helpers

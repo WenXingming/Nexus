@@ -241,6 +241,7 @@ class McpToolProvider:
             description=tool.get("description", ""),
             parameters=tool.get("inputSchema", tool.get("parameters", {})),
             handler=self._create_handler(server, tool["name"]),
+            server_name=server.name,
         )
 
     def _create_handler(

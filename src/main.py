@@ -135,6 +135,7 @@ class Application:
             session_gateway=self._session_gateway,
             rag_gateway=self._rag_gateway,
             client_gateway=self._client,
+            tools_gateway=self._tools_gateway,
         )
         self._interaction_gateway = create_interaction_gateway(slash_specs=slash_specs)
 

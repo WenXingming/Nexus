@@ -372,25 +372,69 @@ class TestHandlePermissions:
         assert 'File write: yes' in result.output
 
 
-class TestHandleTools:
-    def setup_method(self) -> None:
-        self.d = _make_dispatcher_with_specs()
+class TestHandleMcp:
+    def test_mcp_without_tools_gateway(self) -> None:
+        d = _make_dispatcher_with_specs()
+        ctx = _make_slash_context()
+        result = d.dispatch_slash_command(ctx, '/mcp')
+        assert 'MCP gateway not available' in result.output
 
-    def test_tools_list_is_empty_when_no_tools(self) -> None:
-        ctx = _make_slash_context(tool_registry=())
-        result = self.d.dispatch_slash_command(ctx, '/tools')
-        assert 'Registered Tools' in result.output
+    def test_mcp_no_servers(self) -> None:
+        mock_gw = MagicMock()
+        mock_gw.get_mcp_server_summaries.return_value = ()
+        specs = build_default_slash_command_specs(tools_gateway=mock_gw)
+        d = SlashCommandDispatcher(specs=specs)
+        ctx = _make_slash_context()
+        result = d.dispatch_slash_command(ctx, '/mcp')
+        assert 'No MCP servers configured' in result.output
 
-    def test_tools_list_contains_tool_name(self) -> None:
-        tool = ToolDescriptor(
-            name='my_tool',
-            description='A test tool',
-            parameters={'type': 'object', 'properties': {}},
-            handler=lambda _req: None,  # type: ignore[arg-type, return-value]
+    def test_mcp_server_list(self) -> None:
+        from src.core_contracts.tools_contracts import McpServerSummary
+        mock_gw = MagicMock()
+        mock_gw.get_mcp_server_summaries.return_value = (
+            McpServerSummary(name='test-server', transport='stdio', tool_count=5, status='connected'),
+            McpServerSummary(name='bad-server', transport='streamable-http', tool_count=0, status='error', error_message='timeout'),
         )
-        ctx = _make_slash_context(tool_registry=(tool,))
-        result = self.d.dispatch_slash_command(ctx, '/tools')
-        assert 'my_tool' in result.output
+        specs = build_default_slash_command_specs(tools_gateway=mock_gw)
+        d = SlashCommandDispatcher(specs=specs)
+        ctx = _make_slash_context()
+        result = d.dispatch_slash_command(ctx, '/mcp')
+        assert 'test-server' in result.output
+        assert 'stdio' in result.output
+        assert '5 tools' in result.output
+        assert 'connected' in result.output
+        assert 'bad-server' in result.output
+        assert 'timeout' in result.output
+
+    def test_mcp_server_detail(self) -> None:
+        from src.core_contracts.tools_contracts import McpServerSummary
+        tool = ToolDescriptor(
+            name='my_mcp_tool',
+            description='A test MCP tool',
+            parameters={},
+            handler=lambda _req: None,  # type: ignore[arg-type, return-value]
+            server_name='test-server',
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_mcp_server_summaries.return_value = (
+            McpServerSummary(name='test-server', transport='stdio', tool_count=1, status='connected'),
+        )
+        mock_gw.list_tools.return_value = [tool]
+        specs = build_default_slash_command_specs(tools_gateway=mock_gw)
+        d = SlashCommandDispatcher(specs=specs)
+        ctx = _make_slash_context()
+        result = d.dispatch_slash_command(ctx, '/mcp test-server')
+        assert 'test-server' in result.output
+        assert 'my_mcp_tool' in result.output
+
+    def test_mcp_server_not_found(self) -> None:
+        mock_gw = MagicMock()
+        mock_gw.get_mcp_server_summaries.return_value = ()
+        specs = build_default_slash_command_specs(tools_gateway=mock_gw)
+        d = SlashCommandDispatcher(specs=specs)
+        ctx = _make_slash_context()
+        result = d.dispatch_slash_command(ctx, '/mcp unknown')
+        assert 'Server not found' in result.output
 
 
 class TestHandleClear:
@@ -713,7 +757,7 @@ class TestCreateInteractionGatewayFactory:
             stream=io.StringIO(),
         )
         names = {e.name for e in gw.get_autocomplete_entries()}
-        for name in ('help', 'context', 'status', 'permissions', 'tools', 'clear', 'exit', 'quit'):
+        for name in ('help', 'context', 'status', 'permissions', 'mcp', 'clear', 'exit', 'quit'):
             assert name in names
 
     def test_custom_exit_title_used_in_render(self) -> None:
