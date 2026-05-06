@@ -71,6 +71,7 @@ def create_gateway(
         session_gateway=session_gateway,
         rag_gateway=rag_gateway,
         client_gateway=client,
+        tools_gateway=tools_gateway,
     ).get_specs()
 
     executor = AgentLoopExecutor(

@@ -22,9 +22,6 @@ from src.core_contracts.tools_contracts import ToolDescriptor
 type JSONDict = dict[str, object]
 """运行期事件与元数据的字典类型。"""
 
-type WorkspaceScope = str
-"""工作区路径（当前工作目录字符串）。"""
-
 
 # ---------------------------------------------------------------------------
 # 配置与权限 DTO
@@ -213,9 +210,7 @@ class SlashCommandContext:
     tool_call_count: int
     """int：累计工具调用次数。"""
 
-    workspace_path: WorkspaceScope
-    """WorkspaceScope：当前工作目录路径字符串。"""
-
+    workspace_path: str
     context_policy: ContextPolicy
     """ContextPolicy：上下文治理策略配置。"""
 
@@ -348,7 +343,6 @@ class SlashDispatcher(Protocol):
 
 __all__ = [
     'JSONDict',
-    'WorkspaceScope',
     'PermissionPolicy',
     'AgentRunResult',
     'EnvironmentLoadSummary',

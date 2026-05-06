@@ -10,7 +10,7 @@ from src.core_contracts.tools_contracts import (
     ToolExecutionRequest,
     ToolExecutionResult,
 )
-from src.tools.local.context import ToolRuntimeContext
+from src.tools.local.context import ToolRuntimeContext, truncate_output, require_string
 
 
 class FileSystemToolProvider:
@@ -126,7 +126,7 @@ class FileSystemToolProvider:
         if len(children) > max_entries:
             lines.extend(["", f"... omitted {len(children) - max_entries} entries"])
         content = "\n".join(lines)
-        output = self._truncate_output(content, runtime.max_output_chars)
+        output = truncate_output(content, runtime.max_output_chars)
         return ToolExecutionResult(
             name=request.tool_name,
             ok=True,
@@ -141,7 +141,7 @@ class FileSystemToolProvider:
 
     def _read_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
-        raw_path = self._require_string(request.arguments, "path")
+        raw_path = require_string(request.arguments, "path")
         start_line = self._get_optional_int(request.arguments, "start_line", min_value=1)
         end_line = self._get_optional_int(request.arguments, "end_line", min_value=1)
         if start_line is not None and end_line is not None and end_line < start_line:
@@ -155,7 +155,7 @@ class FileSystemToolProvider:
             end = end_line or len(lines)
             text = "".join(lines[start - 1 : end])
 
-        output = self._truncate_output(text, runtime.max_output_chars)
+        output = truncate_output(text, runtime.max_output_chars)
         return ToolExecutionResult(
             name=request.tool_name,
             ok=True,
@@ -165,8 +165,8 @@ class FileSystemToolProvider:
 
     def _write_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
-        raw_path = self._require_string(request.arguments, "path")
-        content = self._require_string(request.arguments, "content")
+        raw_path = require_string(request.arguments, "path")
+        content = require_string(request.arguments, "content")
         target = self._resolve_workspace_path(runtime, raw_path, must_exist=False)
         if target.exists() and target.is_dir():
             raise ValueError(f"Path points to a directory, not a file: {raw_path}")
@@ -181,9 +181,9 @@ class FileSystemToolProvider:
 
     def _edit_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
-        raw_path = self._require_string(request.arguments, "path")
-        old_text = self._require_string(request.arguments, "old_text")
-        new_text = self._require_string(request.arguments, "new_text")
+        raw_path = require_string(request.arguments, "path")
+        old_text = require_string(request.arguments, "old_text")
+        new_text = require_string(request.arguments, "new_text")
         replace_all = self._get_bool(request.arguments, "replace_all", default=False)
         if not old_text:
             raise ValueError("old_text cannot be empty")
@@ -230,12 +230,6 @@ class FileSystemToolProvider:
             raise ValueError(f"Path is not a directory: {raw_path}")
         return resolved
 
-    def _truncate_output(self, text: str, limit: int) -> str:
-        if len(text) <= limit:
-            return text
-        half = max(1, limit // 2)
-        return f"{text[:half]}\n...[output truncated, total {len(text)} chars]...\n{text[-half:]}"
-
     def _to_relative_display(self, path: Path, root: Path) -> str:
         try:
             relative = path.relative_to(root)
@@ -243,12 +237,6 @@ class FileSystemToolProvider:
             return str(path)
         text = str(relative)
         return text if text else "."
-
-    def _require_string(self, arguments: JsonDict, key: str) -> str:
-        value = arguments.get(key)
-        if not isinstance(value, str):
-            raise ValueError(f'Argument "{key}" must be a string')
-        return value
 
     def _get_string(self, arguments: JsonDict, key: str, *, default: str) -> str:
         value = arguments.get(key, default)

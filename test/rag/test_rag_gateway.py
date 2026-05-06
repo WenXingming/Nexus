@@ -2,7 +2,7 @@
 
 通过 Mock 严格隔离全部注入依赖（OpenAIEmbeddingProvider、DocumentChunker、
 VectorStore、DocumentLoader），验证：
-  - index / retrieve / retrieve_and_build_messages / drop_collection / list_collections
+  - index / retrieve / retrieve_and_build_messages
     各接口的主流程、参数透传、结果契约封装；
   - 空输入快速失败（ValueError）；
   - 各环节异常的正确翻译与透传。
@@ -358,28 +358,3 @@ class TestRetrieveAndBuildMessages:
         with pytest.raises(RagError, match='查询嵌入失败'):
             gateway.retrieve_and_build_messages(query='q', collection_name='col')
 
-
-# =============================================================================
-# drop_collection / list_collections
-# =============================================================================
-
-class TestCollectionManagement:
-    def test_drop_collection_delegates_to_vector_store(
-        self, gateway: RagGateway, mock_vector_store: MagicMock
-    ) -> None:
-        gateway.drop_collection('my-col')
-        mock_vector_store.drop.assert_called_once_with('my-col')
-
-    def test_drop_collection_propagates_rag_error(
-        self, gateway: RagGateway, mock_vector_store: MagicMock
-    ) -> None:
-        mock_vector_store.drop.side_effect = RagError('ghost')
-        with pytest.raises(RagError):
-            gateway.drop_collection('ghost')
-
-    def test_list_collections_returns_vector_store_names(
-        self, gateway: RagGateway, mock_vector_store: MagicMock
-    ) -> None:
-        mock_vector_store.list_names.return_value = ['col-a', 'col-b']
-        result = gateway.list_collections()
-        assert result == ['col-a', 'col-b']

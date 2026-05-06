@@ -16,8 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.core_contracts.tools_contracts import ToolDescriptor
-from src.tools.mcp.mcp_tools import McpToolProvider, _McpServerConfig
+from src.core_contracts.tools_contracts import McpServerSummary, ToolDescriptor
+from src.tools.mcp.mcp_tools import McpToolProvider, McpServerConfig
 
 
 @dataclass
@@ -46,9 +46,9 @@ class AsyncMcpToolProvider:
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _load_event: threading.Event = field(default_factory=threading.Event, init=False)
     _tools: tuple[ToolDescriptor, ...] = field(default_factory=tuple, init=False)
-    _errors: tuple[str, ...] = field(default_factory=tuple, init=False)
     _loading: bool = field(default=False, init=False)
     _started: bool = field(default=False, init=False)
+    _server_summaries: tuple[McpServerSummary, ...] = field(default_factory=tuple, init=False)
 
     # ------------------------------------------------------------------
     # Public API
@@ -100,13 +100,13 @@ class AsyncMcpToolProvider:
 
         return self._tools
 
-    def get_errors(self) -> tuple[str, ...]:
-        """获取加载过程中的错误信息。
+    def get_server_summaries(self) -> tuple[McpServerSummary, ...]:
+        """获取每个 MCP 服务器的状态摘要。
 
         Returns:
-            tuple[str, ...]: 错误信息列表；空元组表示无错误。
+            tuple[McpServerSummary, ...]: 服务器状态摘要列表；加载未完成时为空元组。
         """
-        return self._errors
+        return self._server_summaries
 
     def is_loading(self) -> bool:
         """检查是否正在加载中。
@@ -115,14 +115,6 @@ class AsyncMcpToolProvider:
             bool: True 表示正在加载；False 表示已完成或未开始。
         """
         return self._loading
-
-    def is_started(self) -> bool:
-        """检查是否已启动加载。
-
-        Returns:
-            bool: True 表示已启动；False 表示未开始。
-        """
-        return self._started
 
     # ------------------------------------------------------------------
     # Private implementation
@@ -137,18 +129,16 @@ class AsyncMcpToolProvider:
             if not servers:
                 with self._lock:
                     self._tools = ()
-                    self._errors = ()
                 return
 
-            tools, errors = self._parallel_load_servers(provider, servers)
+            tools, errors, summaries = self._parallel_load_servers(provider, servers)
 
             with self._lock:
                 self._tools = tuple(tools)
-                self._errors = tuple(errors)
+                self._server_summaries = tuple(summaries)
 
         except Exception as e:
-            with self._lock:
-                self._errors = (f"Background loading failed: {e}",)
+            pass
         finally:
             self._loading = False
             self._load_event.set()
@@ -156,19 +146,12 @@ class AsyncMcpToolProvider:
     def _parallel_load_servers(
         self,
         provider: McpToolProvider,
-        servers: list[_McpServerConfig],
-    ) -> tuple[list[ToolDescriptor], list[str]]:
-        """并行加载所有 MCP 服务器的工具。
-
-        Args:
-            provider: MCP 工具提供者实例（复用其通信能力）。
-            servers: 服务器配置列表。
-
-        Returns:
-            tuple[list[ToolDescriptor], list[str]]: (工具列表, 错误列表)。
-        """
+        servers: list[McpServerConfig],
+    ) -> tuple[list[ToolDescriptor], list[str], list[McpServerSummary]]:
+        """并行加载所有 MCP 服务器的工具。"""
         tools: list[ToolDescriptor] = []
         errors: list[str] = []
+        summaries: list[McpServerSummary] = []
 
         max_workers = min(len(servers), self._max_workers)
 
@@ -186,15 +169,28 @@ class AsyncMcpToolProvider:
                 try:
                     server_tools = future.result(timeout=self._load_timeout)
                     tools.extend(server_tools)
+                    summaries.append(McpServerSummary(
+                        name=server.name,
+                        transport=server.transport,
+                        tool_count=len(server_tools),
+                        status="connected",
+                    ))
                 except Exception as e:
                     errors.append(f"[{server.name}] {e}")
+                    summaries.append(McpServerSummary(
+                        name=server.name,
+                        transport=server.transport,
+                        tool_count=0,
+                        status="error",
+                        error_message=str(e),
+                    ))
 
-        return tools, errors
+        return tools, errors, summaries
 
     def _load_server_tools(
         self,
         provider: McpToolProvider,
-        server: _McpServerConfig,
+        server: McpServerConfig,
     ) -> list[ToolDescriptor]:
         """加载单个 MCP 服务器的工具。
 

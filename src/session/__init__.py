@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.session.session_gateway import SessionGateway
-from src.session.session_state import SessionStateRuntime
+from src.session.session_state import SessionStateRuntime, generate_session_id
 from src.session.session_store import SessionStore
 
 
@@ -20,4 +20,4 @@ def create_gateway(session_store_directory: Path | None = None) -> SessionGatewa
     return SessionGateway(session_store=session_store, session_state=session_state)
 
 
-__all__ = ["SessionGateway", "create_gateway"]
+__all__ = ["SessionGateway", "create_gateway", "generate_session_id"]
