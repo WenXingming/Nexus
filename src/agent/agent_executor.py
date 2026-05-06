@@ -58,9 +58,6 @@ class AgentLoopExecutor:
     budget_guard: PreModelBudgetGuard
     """PreModelBudgetGuard: 预算守卫。"""
 
-    tools: list[dict]
-    """list[dict]: OpenAI 格式的工具定义列表。"""
-
     def execute(self, state: SessionState, max_turns: int = 5) -> SessionState | None:
         """执行 Agent 迭代循环。
 
@@ -73,6 +70,9 @@ class AgentLoopExecutor:
             None
         """
         for turn_index in range(max_turns):
+            # 每轮 turn 开始时动态获取最新工具列表
+            tools = self.tools_gateway.list_openai_tools()
+
             run_state = ContextRunState(
                 session_messages=state.messages,
                 turn_index=turn_index,
@@ -85,7 +85,7 @@ class AgentLoopExecutor:
                 budget_config=self.budget_config,
                 context_policy=self.context_policy,
                 guard=self.budget_guard,
-                tools=self.tools,
+                tools=tools,
             )
             self.interaction_gateway.print_context_events(pre_model.events)
             if pre_model.pre_model_stop is not None:
@@ -96,7 +96,7 @@ class AgentLoopExecutor:
             result = None
             while True:
                 try:
-                    request = LlmRequest(messages=list(state.messages), tools=self.tools or None)
+                    request = LlmRequest(messages=list(state.messages), tools=tools or None)
                     result = self.client.chat(request)
                     run_state.model_call_count += 1
                     run_state.usage_delta = TokenUsage(
@@ -111,7 +111,7 @@ class AgentLoopExecutor:
                         run_state=run_state,
                         budget_config=self.budget_config,
                         context_policy=self.context_policy,
-                        tools=self.tools,
+                        tools=tools,
                         guard=self.budget_guard,
                         error=exc,
                         attempt=reactive_attempt,

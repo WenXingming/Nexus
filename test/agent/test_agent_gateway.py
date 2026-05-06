@@ -33,7 +33,6 @@ def _make_gateway() -> AgentGateway:
         budget_config=BudgetConfig(),
         context_policy=ContextPolicy(),
         budget_guard=PreModelBudgetGuard(),
-        tools=[],
     )
     return AgentGateway(
         client=client,
@@ -44,7 +43,6 @@ def _make_gateway() -> AgentGateway:
         budget_config=BudgetConfig(),
         context_policy=ContextPolicy(),
         budget_guard=PreModelBudgetGuard(),
-        tools=[],
         executor=executor,
     )
 
