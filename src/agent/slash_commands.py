@@ -250,6 +250,7 @@ class SlashCommandRegistry:
     ) -> SlashCommandResult:
         del parsed
         permissions = context.permissions
+        tools = list(context.tool_registry)
         lines = [
             'Registered Tools',
             '================',
@@ -257,10 +258,13 @@ class SlashCommandRegistry:
             f'Shell enabled: {self._render_bool(permissions.allow_shell_commands)}',
             '',
         ]
-        for tool in context.tool_registry:
+        for tool in tools:
             lines.append(f'{tool.name} - {tool.description}')
         if context.plugin_summary.strip():
             lines.extend(['', context.plugin_summary.strip()])
+        # 使用 ANSI 颜色码显示工具总数（青色）
+        total_line = f'\x1b[38;2;126;231;238mTotal: {len(tools)} tools\x1b[0m'
+        lines.extend(['', total_line])
         return SlashCommandResult(
             handled=True,
             continue_query=False,

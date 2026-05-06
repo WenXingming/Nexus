@@ -64,7 +64,6 @@ class Application:
         self._interaction_gateway: InteractionGateway | None = None  # interaction 门面 (slash/渲染/追踪)
         self._agent_gateway: AgentGateway | None = None  # Agent 主流程编排网关
         self._conversation_orchestrator: ConversationOrchestrator | None = None  # REPL 输入编排器
-        self._tools: list[dict] = []  # 工具列表 (OpenAI function 格式)
         self._budget_config: BudgetConfig | None = None  # token 预算配置
         self._context_policy: ContextPolicy | None = None  # 上下文治理策略
         self._budget_guard: PreModelBudgetGuard | None = None  # 预算守卫
@@ -122,7 +121,10 @@ class Application:
         self._client = create_llm_gateway(config=self._config)
         self._context_gateway = create_context_gateway(client=self._client)
         self._session_gateway = create_session_gateway()
-        self._tools_gateway = create_tools_gateway(mcp_config=self._mcp_config)
+        self._tools_gateway = create_tools_gateway(
+            mcp_config=self._mcp_config,
+            async_mode=True,
+        )
         rag_config = RagModelConfig.from_env()
         self._rag_gateway = build_rag_gateway(
             model_config=self._config,
@@ -135,7 +137,7 @@ class Application:
             client_gateway=self._client,
         )
         self._interaction_gateway = create_interaction_gateway(slash_specs=slash_specs)
-        self._tools = [tool.to_openai_tool() for tool in self._tools_gateway.list_tools()]
+
         self._budget_config = BudgetConfig(
             max_input_tokens=None,
             output_reserve_tokens=max(256, self._config.max_tokens),
@@ -151,7 +153,6 @@ class Application:
             budget_config=self._budget_config,
             context_policy=self._context_policy,
             budget_guard=self._budget_guard,
-            tools=self._tools,
         )
         self._conversation_orchestrator = create_conversation_orchestrator(
             interaction_gateway=self._interaction_gateway,
@@ -171,11 +172,19 @@ class Application:
             SessionState: 新创建的会话状态。
         """
         self._interaction_gateway.render_startup()
-        print(f"已加载 {len(self._tools_gateway.list_tools())} 个工具")
+
+        # 显示本地工具数量
+        # local_tools_count = len(self._tools_gateway.list_tools())
+        # print(f"已加载 {local_tools_count} 个本地工具")
+
+        # # 提示 MCP 工具正在加载
+        # if self._tools_gateway.is_mcp_loading():
+        #     print("MCP 工具加载中... (输入 /tools 查看加载状态)")
+
         print(f"工作目录: {self._workspace_config.root}")
         state = self._session_gateway.create_state("新会话已创建")
         self._interaction_gateway.start_session_tracker(state.session_id)
-        print(f"[会话已创建] session_id={state.session_id}")
+        # print(f"[会话已创建] session_id={state.session_id}")
         return state
 
     def _save_session(self, state: SessionState) -> None:
@@ -195,7 +204,7 @@ class Application:
                 state=state,
                 model_config=self._config,
             )
-            print(f"[会话已保存] session_id={session_id}")
+            # print(f"[会话已保存] session_id={session_id}")
         except Exception as e:
             print(f"[保存失败] {e}", file=sys.stderr)
 
