@@ -70,18 +70,6 @@ class McpToolConfig:
 
 
 @dataclass(frozen=True)
-class McpRequest:
-    """MCP 查询契约。
-
-    资源查询和能力查询共享同一组过滤参数，统一使用该契约。
-    """
-
-    query: str | None = None
-    server_name: str | None = None
-    limit: int = 100
-
-
-@dataclass(frozen=True)
 class McpServerSummary:
     """MCP server status summary."""
 

@@ -12,10 +12,7 @@ from dataclasses import dataclass, field
 
 from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.model_contracts import Message, TokenUsage
-
-type JsonScalar = str | int | float | bool | None
-type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
-type JsonDict = dict[str, JsonValue]
+from src.core_contracts.tools_contracts import JsonDict
 
 
 @dataclass(frozen=True)

@@ -30,25 +30,6 @@ def _make_descriptor(name: str) -> ToolDescriptor:
 class TestAsyncMcpToolProvider:
     """验证 AsyncMcpToolProvider 的核心行为。"""
 
-    def test_start_async_loading_sets_started(self) -> None:
-        """启动异步加载后，is_started 应返回 True。"""
-        provider = AsyncMcpToolProvider(config_path="nonexistent.json")
-
-        with patch.object(provider, '_background_load'):
-            provider.start_async_loading()
-
-        assert provider.is_started() is True
-
-    def test_start_async_loading_ignores_duplicate_calls(self) -> None:
-        """重复调用 start_async_loading 应被忽略。"""
-        provider = AsyncMcpToolProvider(config_path="nonexistent.json")
-
-        with patch.object(provider, '_background_load'):
-            provider.start_async_loading()
-            provider.start_async_loading()  # 应该被忽略
-
-        assert provider.is_started() is True
-
     def test_get_tools_raises_if_not_started(self) -> None:
         """未启动时调用 get_tools 应抛出 RuntimeError。"""
         provider = AsyncMcpToolProvider(config_path="nonexistent.json")
@@ -108,19 +89,6 @@ class TestAsyncMcpToolProvider:
 
         assert provider.is_loading() is False
 
-    def test_get_errors_returns_empty_tuple_on_success(self) -> None:
-        """成功加载时，get_errors 应返回空元组。"""
-        provider = AsyncMcpToolProvider(config_path="nonexistent.json")
-
-        assert provider.get_errors() == ()
-
-    def test_get_errors_returns_errors(self) -> None:
-        """加载失败时，get_errors 应返回错误信息。"""
-        provider = AsyncMcpToolProvider(config_path="nonexistent.json")
-        provider._errors = ("Error 1", "Error 2")
-
-        assert provider.get_errors() == ("Error 1", "Error 2")
-
     def test_background_load_handles_no_config_file(self) -> None:
         """配置文件不存在时，应返回空工具列表。"""
         provider = AsyncMcpToolProvider(config_path="nonexistent.json")
@@ -128,7 +96,6 @@ class TestAsyncMcpToolProvider:
         provider._background_load()
 
         assert provider._tools == ()
-        assert provider._errors == ()
         assert provider._load_event.is_set()
         assert provider._loading is False
 
@@ -179,44 +146,6 @@ class TestToolsGatewayAsync:
         )
 
         assert gateway.is_mcp_loading() is True
-
-    def test_wait_for_mcp_tools_registers_tools(self) -> None:
-        """等待完成后，工具应被注册到 registry。"""
-        tools = (_make_descriptor("mcp_tool1"), _make_descriptor("mcp_tool2"))
-        mock_provider = MagicMock()
-        mock_provider.get_tools.return_value = tools
-
-        registry = ToolRegistry.from_tools()
-        gateway = ToolsGateway(
-            local_executor=MagicMock(),
-            tool_registry=registry,
-            _async_mcp_provider=mock_provider,
-        )
-
-        gateway.wait_for_mcp_tools(timeout=1)
-
-        assert "mcp_tool1" in registry
-        assert "mcp_tool2" in registry
-
-    def test_wait_for_mcp_tools_skips_duplicate_names(self) -> None:
-        """重复名称的工具不应被覆盖。"""
-        existing_tool = _make_descriptor("shared_tool")
-        new_tool = _make_descriptor("shared_tool")
-
-        mock_provider = MagicMock()
-        mock_provider.get_tools.return_value = (new_tool,)
-
-        registry = ToolRegistry.from_tools(existing_tool)
-        gateway = ToolsGateway(
-            local_executor=MagicMock(),
-            tool_registry=registry,
-            _async_mcp_provider=mock_provider,
-        )
-
-        gateway.wait_for_mcp_tools(timeout=1)
-
-        # 不应被覆盖
-        assert registry["shared_tool"] is existing_tool
 
     def test_list_tools_merges_async_tools(self) -> None:
         """list_tools 应自动合并异步加载的工具。"""

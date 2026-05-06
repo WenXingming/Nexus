@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.core_contracts.tools_contracts import McpServerSummary, ToolDescriptor
-from src.tools.mcp.mcp_tools import McpToolProvider, _McpServerConfig
+from src.tools.mcp.mcp_tools import McpToolProvider, McpServerConfig
 
 
 @dataclass
@@ -46,7 +46,6 @@ class AsyncMcpToolProvider:
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _load_event: threading.Event = field(default_factory=threading.Event, init=False)
     _tools: tuple[ToolDescriptor, ...] = field(default_factory=tuple, init=False)
-    _errors: tuple[str, ...] = field(default_factory=tuple, init=False)
     _loading: bool = field(default=False, init=False)
     _started: bool = field(default=False, init=False)
     _server_summaries: tuple[McpServerSummary, ...] = field(default_factory=tuple, init=False)
@@ -101,14 +100,6 @@ class AsyncMcpToolProvider:
 
         return self._tools
 
-    def get_errors(self) -> tuple[str, ...]:
-        """获取加载过程中的错误信息。
-
-        Returns:
-            tuple[str, ...]: 错误信息列表；空元组表示无错误。
-        """
-        return self._errors
-
     def get_server_summaries(self) -> tuple[McpServerSummary, ...]:
         """获取每个 MCP 服务器的状态摘要。
 
@@ -125,14 +116,6 @@ class AsyncMcpToolProvider:
         """
         return self._loading
 
-    def is_started(self) -> bool:
-        """检查是否已启动加载。
-
-        Returns:
-            bool: True 表示已启动；False 表示未开始。
-        """
-        return self._started
-
     # ------------------------------------------------------------------
     # Private implementation
     # ------------------------------------------------------------------
@@ -146,19 +129,16 @@ class AsyncMcpToolProvider:
             if not servers:
                 with self._lock:
                     self._tools = ()
-                    self._errors = ()
                 return
 
             tools, errors, summaries = self._parallel_load_servers(provider, servers)
 
             with self._lock:
                 self._tools = tuple(tools)
-                self._errors = tuple(errors)
                 self._server_summaries = tuple(summaries)
 
         except Exception as e:
-            with self._lock:
-                self._errors = (f"Background loading failed: {e}",)
+            pass
         finally:
             self._loading = False
             self._load_event.set()
@@ -166,7 +146,7 @@ class AsyncMcpToolProvider:
     def _parallel_load_servers(
         self,
         provider: McpToolProvider,
-        servers: list[_McpServerConfig],
+        servers: list[McpServerConfig],
     ) -> tuple[list[ToolDescriptor], list[str], list[McpServerSummary]]:
         """并行加载所有 MCP 服务器的工具。"""
         tools: list[ToolDescriptor] = []
@@ -210,7 +190,7 @@ class AsyncMcpToolProvider:
     def _load_server_tools(
         self,
         provider: McpToolProvider,
-        server: _McpServerConfig,
+        server: McpServerConfig,
     ) -> list[ToolDescriptor]:
         """加载单个 MCP 服务器的工具。
 

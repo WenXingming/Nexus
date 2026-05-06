@@ -6,7 +6,7 @@ SlashCommandSpec，并由组合根注入 InteractionGateway。
 
 from __future__ import annotations
 
-from src.context.context_gateway import ContextGateway
+from src.context import ContextGateway
 from src.core_contracts.interaction_contracts import (
     ParsedSlashCommand,
     SlashCommandContext,

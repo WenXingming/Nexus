@@ -97,21 +97,6 @@ class ToolsGateway:
             return False
         return self._async_mcp_provider.is_loading()
 
-    def wait_for_mcp_tools(self, timeout: float | None = 60) -> None:
-        """等待 MCP 工具加载完成并注册到 registry。
-
-        Args:
-            timeout: 等待超时时间（秒）；None 表示无限等待。
-
-        Raises:
-            TimeoutError: 等待超时。
-        """
-        if self._async_mcp_provider is None:
-            return
-
-        tools = self._async_mcp_provider.get_tools(timeout=timeout)
-        self._register_mcp_tools(tools)
-
     def get_mcp_server_summaries(self) -> tuple[McpServerSummary, ...]:
         """返回所有 MCP 服务器的状态摘要。
 
