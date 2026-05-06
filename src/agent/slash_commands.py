@@ -132,6 +132,11 @@ class SlashCommandRegistry:
                 description='Query RAG collection with retrieval-augmented generation.',
                 handler=self._handle_rag_ask,
             ),
+            SlashCommandSpec(
+                names=('compact',),
+                description='Manually trigger context compression.',
+                handler=self._handle_compact,
+            ),
         )
 
     def _handle_help(
@@ -506,6 +511,65 @@ class SlashCommandRegistry:
                 command_name='rag-ask',
                 output=f'[错误] RAG 问答失败: {exc}',
                 metadata={'error': 'query_failed'},
+            )
+
+    def _handle_compact(
+        self,
+        context: SlashCommandContext,
+        parsed: ParsedSlashCommand,
+    ) -> SlashCommandResult:
+        del parsed
+        if self._context_gateway is None:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output=(
+                    'Compact\n'
+                    '=======\n'
+                    'Context gateway not available.\n'
+                    'Provide a ContextGateway when assembling slash command handlers to enable this command.'
+                ),
+                metadata={'error': 'context_gateway_missing'},
+            )
+
+        messages = context.session_state.messages
+        if not messages:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output='[Compact] No messages to compact.',
+            )
+
+        result = self._context_gateway.compact_messages(
+            messages,
+            preserve_messages=context.context_policy.compact_preserve_messages,
+        )
+
+        if result.compacted:
+            lines = [
+                'Compact',
+                '=======',
+                f'Messages replaced: {result.messages_replaced}',
+                f'Tokens removed: {result.tokens_removed}',
+                f'Pre tokens: {result.pre_tokens}',
+                f'Post tokens: {result.post_tokens}',
+                f'Preserve messages: {result.preserve_messages_used}',
+            ]
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output='\n'.join(lines),
+            )
+        else:
+            return SlashCommandResult(
+                handled=True,
+                continue_query=False,
+                command_name='compact',
+                output=f'[Compact] {result.error or "No progress made"}',
+                metadata={'error': 'compact_failed'},
             )
 
     def _render_optional_int(self, value: int | None) -> str:
