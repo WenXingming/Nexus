@@ -14,6 +14,28 @@ class TestModelConfigFromEnv:
         with pytest.raises(ValueError, match="OPENAI_API_KEY"):
             ModelConfig.from_env()
 
+    def test_uses_safe_default_max_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.delenv("OPENAI_MAX_TOKENS", raising=False)
+
+        cfg = ModelConfig.from_env()
+
+        assert cfg.max_tokens == 4096
+
+    def test_rejects_out_of_range_max_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", "70000")
+
+        with pytest.raises(ValueError, match="OPENAI_MAX_TOKENS"):
+            ModelConfig.from_env()
+
+    def test_rejects_non_integer_max_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", "abc")
+
+        with pytest.raises(ValueError, match="OPENAI_MAX_TOKENS"):
+            ModelConfig.from_env()
+
 
 class TestRagModelConfigFromEnv:
     def test_uses_default_when_no_env_present(self, monkeypatch: pytest.MonkeyPatch) -> None:

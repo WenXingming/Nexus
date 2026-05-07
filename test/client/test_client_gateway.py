@@ -172,7 +172,7 @@ class TestChatSuccess:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "test-model"          # 回退到 config.model_name
         assert kwargs["temperature"] == 0.7             # 回退到 config.temperature
-        assert kwargs["max_tokens"] == 1_000_000             # 回退到 config.max_tokens
+        assert kwargs["max_tokens"] == 4_096             # 回退到 config.max_tokens
 
 
 # =============================================================================
@@ -308,7 +308,7 @@ class TestChatValidation:
         request = LlmRequest(model="gpt-4o", messages=valid_messages, temperature=None)
         gateway.chat(request)  # 不应抛出
 
-    @pytest.mark.parametrize("tokens", [0, -1])
+    @pytest.mark.parametrize("tokens", [0, -1, 65_537])
     def test_max_tokens_not_positive(self, gateway: ClientGateway, valid_messages: list[Message], tokens: int) -> None:
         request = LlmRequest(model="gpt-4o", messages=valid_messages, max_tokens=tokens)
         with pytest.raises(ValueError, match="max_tokens"):
@@ -380,7 +380,7 @@ class TestChatStreamSuccess:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "test-model"
         assert kwargs["temperature"] == 0.7
-        assert kwargs["max_tokens"] == 1_000_000
+        assert kwargs["max_tokens"] == 4_096
 
 
 # =============================================================================

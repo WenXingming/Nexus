@@ -59,7 +59,7 @@ All cross-module data structures live in `src/core_contracts/` as frozen datacla
 | `OPENAI_BASE_URL` | No | OpenAI default |
 | `OPENAI_MODEL` | No | `gpt-4o` |
 | `OPENAI_TEMPERATURE` | No | `0.7` |
-| `OPENAI_MAX_TOKENS` | No | `1000000` |
+| `OPENAI_MAX_TOKENS` | No | `4096` |
 | `RAG_EMBEDDING_MODEL` / `OPENAI_EMBEDDING_MODEL` | No | `text-embedding-3-small` |
 
 ## Tests

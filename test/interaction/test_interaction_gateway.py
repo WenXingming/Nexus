@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -21,25 +22,30 @@ from src.agent import build_default_slash_command_specs
 from src.core_contracts.context_contracts import BudgetConfig, BudgetProjection, ContextPolicy
 from src.core_contracts.interaction_contracts import (
     AgentRunResult,
+    CodeDiffArtifact,
     EnvironmentLoadSummary,
-    JSONDict,
     PermissionPolicy,
     SessionSummary,
     SlashAutocompleteEntry,
     SlashCommandContext,
     SlashCommandSpec,
+    TaskProgressEvent,
+    ToolCallRecord,
 )
 from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.session_contracts import SessionState
 from src.core_contracts.tools_contracts import ToolDescriptor
 from src.interaction import InteractionGateway, create_interaction_gateway
+from src.interaction.conversation_render import ConversationRenderer
+from src.interaction.diff_render import DiffRenderer
+from src.interaction.input_layout import InputPromptLayout
 from src.interaction.quit_render import ExitRenderer
-from src.interaction.runtime_event_printer import RuntimeEventPrinter
 from src.interaction.session_summary import SessionInteractionTracker
 from src.interaction.slash_autocomplete import SlashAutocompleteCatalog, SlashAutocompletePrompt
 from src.interaction.slash_commands import SlashCommandDispatcher
 from src.interaction.slash_render import SlashCommandRenderer
 from src.interaction.startup_render import StartupRenderer
+from src.interaction.task_render import TaskProgressRenderer
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +55,7 @@ from src.interaction.startup_render import StartupRenderer
 
 def _make_gateway(
     dispatcher: SlashCommandDispatcher | None = None,
-    event_printer: RuntimeEventPrinter | None = None,
+    conversation_renderer: ConversationRenderer | None = None,
     session_tracker: SessionInteractionTracker | None = None,
     stream: io.StringIO | None = None,
 ) -> InteractionGateway:
@@ -60,7 +66,10 @@ def _make_gateway(
         startup_renderer=StartupRenderer(),
         exit_renderer=ExitRenderer(),
         slash_renderer=SlashCommandRenderer(),
-        event_printer=event_printer or RuntimeEventPrinter(stream=_stream),
+        conversation_renderer=conversation_renderer or ConversationRenderer(
+            task_renderer=TaskProgressRenderer(),
+            diff_renderer=DiffRenderer(),
+        ),
         autocomplete_prompt=SlashAutocompletePrompt(entries=(), fallback_reader=lambda _: ''),
         stream=_stream,
     )
@@ -542,24 +551,25 @@ class TestSessionInteractionTracker:
 
     def test_observe_run_result_updates_session_id(self) -> None:
         tracker = SessionInteractionTracker.start()
-        result = AgentRunResult(session_id='new-id', events=())
+        result = AgentRunResult(session_id='new-id')
         tracker.observe_run_result(result, current_session_id='fallback')
         assert tracker.session_id == 'new-id'
 
     def test_observe_run_result_uses_fallback_if_no_session_id(self) -> None:
         tracker = SessionInteractionTracker.start()
-        result = AgentRunResult(session_id=None, events=())
+        result = AgentRunResult(session_id=None)
         tracker.observe_run_result(result, current_session_id='fallback')
         assert tracker.session_id == 'fallback'
 
     def test_observe_run_result_counts_tool_events(self) -> None:
         tracker = SessionInteractionTracker.start()
-        events: tuple[JSONDict, ...] = (
-            {'type': 'tool_result', 'ok': True},
-            {'type': 'tool_result', 'ok': False},
-            {'type': 'model_turn'},
+        result = AgentRunResult(
+            session_id='s1',
+            tool_calls=(
+                ToolCallRecord(name='read_file', ok=True),
+                ToolCallRecord(name='edit_file', ok=False),
+            ),
         )
-        result = AgentRunResult(session_id='s1', events=events)
         tracker.observe_run_result(result, current_session_id=None)
         assert tracker.tool_calls == 2
         assert tracker.tool_successes == 1
@@ -621,6 +631,83 @@ class TestInteractionGatewayDelegation:
         gw = _make_gateway(stream=stream)
         gw.render_slash_result(command_name='help', output='some help', stream=stream)
 
+    def test_render_task_event_outputs_diff_block(self) -> None:
+        stream = io.StringIO()
+        gw = _make_gateway(stream=stream)
+        gw.render_task_event(
+            TaskProgressEvent(
+                title='Tool edit_file finished',
+                detail='Edited src/example.py',
+                status='success',
+                diff=CodeDiffArtifact(
+                    path='src/example.py',
+                    operation='update',
+                    diff='--- a/src/example.py\n+++ b/src/example.py\n@@ -1 +1 @@\n-old\n+new\n',
+                ),
+            ),
+            stream=stream,
+        )
+        output = stream.getvalue()
+        assert 'Tool edit_file finished' in output
+        assert 'Diff · src/example.py' in output
+        assert '+new' in output
+
+    def test_render_task_event_uses_lightweight_stream_style(self) -> None:
+        stream = io.StringIO()
+        gw = _make_gateway(stream=stream)
+        gw.render_task_event(
+            TaskProgressEvent(
+                title='Thinking',
+                detail='Inspecting current files\nComparing edits\nPreparing update',
+                status='running',
+                turn=2,
+            ),
+            stream=stream,
+        )
+        output = stream.getvalue()
+        assert '… Turn 2 · Thinking' in output
+        assert '  Inspecting current files' in output
+        assert '╭' not in output
+        assert '│' not in output
+
+    def test_print_context_events_skips_low_value_diagnostics(self) -> None:
+        stream = io.StringIO()
+        gw = _make_gateway(stream=stream)
+        gw.print_context_events((
+            {
+                'type': 'token_budget',
+                'turn': 1,
+                'projected_input_tokens': 1200,
+                'is_soft_over': False,
+                'is_hard_over': False,
+            },
+            {
+                'type': 'compact_boundary',
+                'turn': 1,
+                'trigger': 'auto',
+                'messages_replaced': 4,
+                'tokens_removed': 800,
+            },
+        ))
+        assert stream.getvalue() == ''
+
+    def test_print_context_events_renders_recovery_summary(self) -> None:
+        stream = io.StringIO()
+        gw = _make_gateway(stream=stream)
+        gw.print_context_events((
+            {
+                'type': 'reactive_compact_retry',
+                'turn': 3,
+                'attempt': 1,
+                'ok': True,
+                'messages_replaced': 6,
+                'tokens_removed': 900,
+            },
+        ))
+        output = stream.getvalue()
+        assert 'Retrying after context compaction' in output
+        assert 'attempt=1' in output
+
     def test_dispatch_slash_command_delegates(self) -> None:
         stream = io.StringIO()
         d = _make_dispatcher_with_specs()
@@ -676,15 +763,17 @@ class TestInteractionGatewaySessionTracking:
 
     def test_observe_run_result_no_op_without_tracker(self) -> None:
         gw = _make_gateway()
-        result = AgentRunResult(session_id='x', events=())
+        result = AgentRunResult(session_id='x')
         # Should not raise
         gw.observe_run_result(result, current_session_id='x')
 
     def test_observe_run_result_updates_tracker(self) -> None:
         gw = _make_gateway()
         gw.start_session_tracker()
-        events: tuple[JSONDict, ...] = ({'type': 'tool_result', 'ok': True},)
-        result = AgentRunResult(session_id='new-s', events=events)
+        result = AgentRunResult(
+            session_id='new-s',
+            tool_calls=(ToolCallRecord(name='read_file', ok=True),),
+        )
         gw.observe_run_result(result, current_session_id='fallback')
         summary = gw.get_session_summary()
         assert summary.session_id == 'new-s'
@@ -721,13 +810,56 @@ class TestInteractionGatewaySessionTracking:
             startup_renderer=StartupRenderer(),
             exit_renderer=ExitRenderer(),
             slash_renderer=SlashCommandRenderer(),
-            event_printer=RuntimeEventPrinter(stream=stream),
+            conversation_renderer=ConversationRenderer(
+                task_renderer=TaskProgressRenderer(),
+                diff_renderer=DiffRenderer(),
+            ),
             autocomplete_prompt=prompt,
             stream=stream,
         )
-        result = gw.read_input('Enter> ')
+        result = gw.read_input('Enter')
         assert result == 'user input'
-        assert 'Enter> ' in captured
+        assert captured[0].startswith('─')
+        assert '\n›  ' in captured[0]
+        assert 'Enter' not in captured[0]
+        assert 'User' not in captured[0]
+        assert captured[0].endswith('\n›  ')
+        assert len(captured[0].splitlines()[0]) >= 36
+
+    def test_read_input_does_not_pass_unsupported_prompt_kwargs(self) -> None:
+        stream = io.StringIO()
+        prompt = SlashAutocompletePrompt(entries=(), fallback_reader=lambda _: '', stdout=stream)
+        prompt._session = MagicMock()
+        prompt._session.prompt.return_value = 'typed'
+
+        result = prompt.read('')
+
+        assert result == 'typed'
+        _, kwargs = prompt._session.prompt.call_args
+        assert 'erase_when_done' not in kwargs
+        assert 'bottom_toolbar' in kwargs
+        assert stream.getvalue().startswith('─')
+        assert stream.getvalue().endswith('\n')
+
+    def test_prompt_style_removes_toolbar_highlight(self) -> None:
+        assert SlashAutocompletePrompt._PROMPT_STYLE_RULES['bottom-toolbar'] == 'noreverse bg:default'
+
+    @pytest.mark.parametrize(
+        ('text', 'expected'),
+        [
+            ('', False),
+            ('   ', False),
+            ('hello', True),
+            ('/help', True),
+        ],
+    )
+    def test_should_accept_input_requires_non_blank_text(self, text: str, expected: bool) -> None:
+        assert SlashAutocompletePrompt._should_accept_input(text) is expected
+
+    def test_input_layout_uses_terminal_width_minus_one(self) -> None:
+        with patch('src.interaction.input_layout.shutil.get_terminal_size', return_value=os.terminal_size((120, 24))):
+            layout = InputPromptLayout()
+            assert len(layout.build_rule_text()) == 119
 
 
 # ---------------------------------------------------------------------------

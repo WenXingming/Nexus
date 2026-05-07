@@ -22,6 +22,9 @@ from src.core_contracts.tools_contracts import ToolDescriptor
 type JSONDict = dict[str, object]
 """运行期事件与元数据的字典类型。"""
 
+type ActivityStatus = Literal['running', 'info', 'success', 'warning', 'error']
+"""交互层任务过程块的视觉状态标签。"""
+
 
 # ---------------------------------------------------------------------------
 # 配置与权限 DTO
@@ -52,18 +55,25 @@ class PermissionPolicy:
 
 
 @dataclass(frozen=True)
-class AgentRunResult:
-    """单轮 agent 执行结果的最小跨模块契约。
+class ToolCallRecord:
+    """一次工具执行的只读统计记录。"""
 
-    interaction 模块通过本 DTO 从外部接收每轮运行产物，
-    用于更新会话统计追踪器。
-    """
+    name: str
+    """str: 工具名称。"""
+
+    ok: bool
+    """bool: 工具调用是否成功。"""
+
+
+@dataclass(frozen=True)
+class AgentRunResult:
+    """单轮 agent 执行结果的最小跨模块契约。"""
 
     session_id: str | None = None
     """str | None: 本轮执行产生或确认的活动会话 ID。"""
 
-    events: tuple[JSONDict, ...] = field(default_factory=tuple)
-    """tuple[JSONDict, ...]: 本轮产生的结构化事件序列（如 tool_result）。"""
+    tool_calls: tuple[ToolCallRecord, ...] = field(default_factory=tuple)
+    """tuple[ToolCallRecord, ...]: 本轮执行中产生的工具调用统计。"""
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +177,39 @@ class SessionSummary:
         if self.tool_calls <= 0:
             return 0.0
         return self.tool_successes / self.tool_calls
+
+@dataclass(frozen=True)
+class CodeDiffArtifact:
+    """描述一次代码变更的统一 diff 产物。"""
+
+    path: str
+    """str: 发生变更的工作区相对路径。"""
+
+    operation: Literal['create', 'update']
+    """Literal['create', 'update']: 变更类型。"""
+
+    diff: str
+    """str: unified diff 文本。"""
+
+
+@dataclass(frozen=True)
+class TaskProgressEvent:
+    """描述任务执行过程中要展示的一个结构化过程节点。"""
+
+    title: str
+    """str: 过程节点标题。"""
+
+    detail: str = ''
+    """str: 过程节点补充说明。"""
+
+    status: ActivityStatus = 'info'
+    """ActivityStatus: 节点状态。"""
+
+    turn: int | None = None
+    """int | None: 关联的 turn 序号。"""
+
+    diff: CodeDiffArtifact | None = None
+    """CodeDiffArtifact | None: 可选的代码 diff 产物。"""
 
 
 # ---------------------------------------------------------------------------

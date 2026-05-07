@@ -38,8 +38,29 @@ class TestFileSystemToolProvider:
 
         assert write_result.ok is True
         assert "Wrote" in write_result.content
+        assert write_result.metadata["diff_artifact"]["operation"] == "create"
+        assert "+++ b/a.txt" in write_result.metadata["diff_artifact"]["diff"]
         assert read_result.ok is True
         assert read_result.content == "line2\n"
+
+    def test_edit_file_returns_diff_artifact(self, fs_provider: FileSystemToolProvider, runtime: dict[str, object]) -> None:
+        tools = {tool.name: tool for tool in fs_provider.build_tools()}
+        tools["write_file"].handler(
+            ToolExecutionRequest(tool_name="write_file", arguments={"path": "a.txt", "content": "old\n"}, runtime=runtime)
+        )
+
+        result = tools["edit_file"].handler(
+            ToolExecutionRequest(
+                tool_name="edit_file",
+                arguments={"path": "a.txt", "old_text": "old\n", "new_text": "new\n"},
+                runtime=runtime,
+            )
+        )
+
+        assert result.ok is True
+        assert result.metadata["diff_artifact"]["operation"] == "update"
+        assert "-old" in result.metadata["diff_artifact"]["diff"]
+        assert "+new" in result.metadata["diff_artifact"]["diff"]
 
     def test_path_escape_is_blocked(self, fs_provider: FileSystemToolProvider, runtime: dict[str, object]) -> None:
         tools = {tool.name: tool for tool in fs_provider.build_tools()}

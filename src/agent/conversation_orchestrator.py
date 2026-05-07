@@ -50,7 +50,7 @@ class ConversationOrchestrator:
     def _read_user_input(self) -> str:
         """读取并处理用户输入。"""
         try:
-            return self.interaction_gateway.read_input("\nUser > ").strip()
+            return self.interaction_gateway.read_input("").strip()
         except (KeyboardInterrupt, EOFError):
             return "/quit"
 
