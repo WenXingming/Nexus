@@ -13,13 +13,15 @@ from typing import TextIO
 
 from src.core_contracts.interaction_contracts import SlashAutocompleteEntry, SlashCommandSpec
 
+from src.interaction.conversation_render import ConversationRenderer as _ConversationRenderer
+from src.interaction.diff_render import DiffRenderer as _DiffRenderer
 from src.interaction.interaction_gateway import InteractionGateway
 from src.interaction.quit_render import ExitRenderer as _ExitRenderer
-from src.interaction.runtime_event_printer import RuntimeEventPrinter as _RuntimeEventPrinter
 from src.interaction.slash_autocomplete import SlashAutocompletePrompt as _SlashAutocompletePrompt
 from src.interaction.slash_commands import SlashCommandDispatcher as _SlashCommandDispatcher
 from src.interaction.slash_render import SlashCommandRenderer as _SlashCommandRenderer
 from src.interaction.startup_render import StartupRenderer as _StartupRenderer
+from src.interaction.task_render import TaskProgressRenderer as _TaskProgressRenderer
 
 
 def create_interaction_gateway(
@@ -54,7 +56,10 @@ def create_interaction_gateway(
     startup_renderer = _StartupRenderer(lines=startup_lines, subtitle=startup_subtitle)
     exit_renderer = _ExitRenderer(title=exit_title)
     slash_renderer = _SlashCommandRenderer()
-    event_printer = _RuntimeEventPrinter(stream=_stream)
+    conversation_renderer = _ConversationRenderer(
+        task_renderer=_TaskProgressRenderer(),
+        diff_renderer=_DiffRenderer(),
+    )
 
     autocomplete_entries = _build_autocomplete_entries(dispatcher)
     autocomplete_prompt = _SlashAutocompletePrompt(
@@ -68,7 +73,7 @@ def create_interaction_gateway(
         startup_renderer=startup_renderer,
         exit_renderer=exit_renderer,
         slash_renderer=slash_renderer,
-        event_printer=event_printer,
+        conversation_renderer=conversation_renderer,
         autocomplete_prompt=autocomplete_prompt,
         stream=_stream,
         stdin=_stdin,

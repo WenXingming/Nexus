@@ -17,6 +17,7 @@ from src.core_contracts.client_contracts import (
     LlmResult,
     LlmStreamChunk,
 )
+from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.model_contracts import Message
 
 
@@ -141,8 +142,10 @@ class ClientGateway:
             )
 
     def _validate_max_tokens(self, max_tokens: int) -> None:
-        if max_tokens < 1:
-            raise ValueError(f"max_tokens 必须为正整数，当前值: {max_tokens}")
+        if not (ModelConfig.MIN_MAX_TOKENS <= max_tokens <= ModelConfig.MAX_MAX_TOKENS):
+            raise ValueError(
+                f"max_tokens 必须在 [{ModelConfig.MIN_MAX_TOKENS}, {ModelConfig.MAX_MAX_TOKENS}] 范围内，当前值: {max_tokens}"
+            )
 
     def _validate_optional_float(self, field_name: str, value: float | None, lo: float, hi: float) -> None:
         if value is not None and not (lo <= value <= hi):

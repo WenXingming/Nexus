@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 
 from src.core_contracts.tools_contracts import (
@@ -170,13 +171,24 @@ class FileSystemToolProvider:
         target = self._resolve_workspace_path(runtime, raw_path, must_exist=False)
         if target.exists() and target.is_dir():
             raise ValueError(f"Path points to a directory, not a file: {raw_path}")
+        existed = target.exists()
+        original = target.read_text(encoding="utf-8") if existed else ""
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+        relative_path = self._to_relative_display(target, runtime.root)
         return ToolExecutionResult(
             name=request.tool_name,
             ok=True,
-            content=f"Wrote {self._to_relative_display(target, runtime.root)} ({len(content)} chars).",
-            metadata={"action": "write_file"},
+            content=f"Wrote {relative_path} ({len(content)} chars).",
+            metadata={
+                "action": "write_file",
+                "diff_artifact": self._build_diff_artifact(
+                    path=relative_path,
+                    operation="update" if existed else "create",
+                    before=original,
+                    after=content,
+                ),
+            },
         )
 
     def _edit_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
@@ -199,12 +211,22 @@ class FileSystemToolProvider:
             replaced_count = 1
             updated = original.replace(old_text, new_text, 1)
         target.write_text(updated, encoding="utf-8")
+        relative_path = self._to_relative_display(target, runtime.root)
 
         return ToolExecutionResult(
             name=request.tool_name,
             ok=True,
-            content=f"Edited {self._to_relative_display(target, runtime.root)}, replaced {replaced_count} occurrence(s).",
-            metadata={"action": "edit_file", "replaced_count": replaced_count},
+            content=f"Edited {relative_path}, replaced {replaced_count} occurrence(s).",
+            metadata={
+                "action": "edit_file",
+                "replaced_count": replaced_count,
+                "diff_artifact": self._build_diff_artifact(
+                    path=relative_path,
+                    operation="update",
+                    before=original,
+                    after=updated,
+                ),
+            },
         )
 
     def _resolve_workspace_path(
@@ -237,6 +259,28 @@ class FileSystemToolProvider:
             return str(path)
         text = str(relative)
         return text if text else "."
+
+    def _build_diff_artifact(
+        self,
+        *,
+        path: str,
+        operation: str,
+        before: str,
+        after: str,
+    ) -> JsonDict:
+        diff = ''.join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f'a/{path}',
+                tofile=f'b/{path}',
+            )
+        )
+        return {
+            "path": path,
+            "operation": operation,
+            "diff": diff,
+        }
 
     def _get_string(self, arguments: JsonDict, key: str, *, default: str) -> str:
         value = arguments.get(key, default)

@@ -7,7 +7,7 @@ TerminalRenderer 等）。
 InteractionGateway 封装的能力：
   - CLI 启动横幅与退出摘要渲染
   - slash 命令解析、查找与分发（实现 SlashDispatcher 协议）
-  - 运行期结构化事件打印（TTY 状态栏 + 流式日志）
+  - 任务过程块与 diff 块渲染，以及带分隔式布局的 live prompt 输入
   - 带 slash 自动补全的交互式用户输入读取
   - 跨多轮交互的会话统计累计与 SessionSummary 生成
 """
@@ -19,8 +19,8 @@ from typing import Callable, Mapping, TextIO
 
 from src.core_contracts.interaction_contracts import (
     AgentRunResult,
+    CodeDiffArtifact,
     EnvironmentLoadSummary,
-    JSONDict,
     ParsedSlashCommand,
     SessionSummary,
     SlashAutocompleteEntry,
@@ -28,10 +28,11 @@ from src.core_contracts.interaction_contracts import (
     SlashCommandResolution,
     SlashCommandResult,
     SlashCommandSpec,
+    TaskProgressEvent,
 )
 
+from src.interaction.conversation_render import ConversationRenderer
 from src.interaction.quit_render import ExitRenderer
-from src.interaction.runtime_event_printer import RuntimeEventPrinter
 from src.interaction.session_summary import SessionInteractionTracker
 from src.interaction.slash_autocomplete import SlashAutocompletePrompt
 from src.interaction.slash_commands import SlashCommandDispatcher
@@ -48,7 +49,7 @@ class InteractionGateway:
       - ExitRenderer      — 会话退出总结渲染
       - SlashCommandRenderer — slash 命令结果面板渲染
       - SlashCommandDispatcher — slash 命令解析、索引与分发
-      - RuntimeEventPrinter  — 运行期事件打印（含 TTY spinner 状态栏）
+      - ConversationRenderer — 任务过程与 diff 的统一展示协调器
       - SlashAutocompletePrompt — 带 slash 自动补全的交互式输入读取器
       - SessionInteractionTracker — 跨多轮的会话统计累计器
 
@@ -66,7 +67,7 @@ class InteractionGateway:
         startup_renderer: StartupRenderer,
         exit_renderer: ExitRenderer,
         slash_renderer: SlashCommandRenderer,
-        event_printer: RuntimeEventPrinter,
+        conversation_renderer: ConversationRenderer,
         autocomplete_prompt: SlashAutocompletePrompt,
         stream: TextIO | None = None,
         stdin: TextIO | None = None,
@@ -80,7 +81,7 @@ class InteractionGateway:
             startup_renderer (StartupRenderer): CLI 启动横幅渲染器。
             exit_renderer (ExitRenderer): CLI 退出总结渲染器。
             slash_renderer (SlashCommandRenderer): slash 命令结果面板渲染器。
-            event_printer (RuntimeEventPrinter): 运行期事件打印器，已绑定输出流。
+            conversation_renderer (ConversationRenderer): 任务过程与 diff 渲染协调器。
             autocomplete_prompt (SlashAutocompletePrompt): 带 slash 自动补全的输入读取器。
             stream (TextIO | None): 统一 CLI 输出流；None 时默认 sys.stdout。
             stdin (TextIO | None): 统一 CLI 输入流；None 时默认 sys.stdin。
@@ -99,8 +100,8 @@ class InteractionGateway:
         self._slash_renderer = slash_renderer
         # SlashCommandRenderer: slash 命令结果面板渲染器（由外部工厂注入）。
 
-        self._event_printer = event_printer
-        # RuntimeEventPrinter: 运行期结构化事件打印器（由外部工厂注入）。
+        self._conversation_renderer = conversation_renderer
+        # ConversationRenderer: 会话展示协调器（由外部工厂注入）。
 
         self._autocomplete_prompt = autocomplete_prompt
         # SlashAutocompletePrompt: 带 slash 自动补全的交互式输入读取器（由外部工厂注入）。
@@ -177,6 +178,14 @@ class InteractionGateway:
             metadata=metadata,
             stream=stream or self._stream,
         )
+
+    def render_task_event(
+        self,
+        event: TaskProgressEvent,
+        stream: TextIO | None = None,
+    ) -> None:
+        """渲染一条结构化任务过程事件。"""
+        self._conversation_renderer.render_task_event(event, stream=stream or self._stream)
 
     # ─────────────────────────────────────────────────────────
     # Public API — slash 命令（Slash Commands）
@@ -257,77 +266,21 @@ class InteractionGateway:
     # Public API — 事件打印（Event Printing）
     # ─────────────────────────────────────────────────────────
 
-    def build_progress_reporter(self) -> Callable[[JSONDict], None]:
-        """返回可注入到 agent.progress_reporter 的运行期事件上报回调。
-
-        调用方将返回值赋值给 agent.progress_reporter，agent 在执行期间
-        每产生一个结构化事件就调用该回调。
-
-        Returns:
-            Callable[[JSONDict], None]: 直接指向内部 RuntimeEventPrinter.emit 的可调用对象。
-        """
-        return self._event_printer.emit
+    def build_progress_reporter(self) -> Callable[[TaskProgressEvent], None]:
+        """返回结构化任务事件的直接渲染回调。"""
+        return lambda event: self.render_task_event(event)
 
     def flush_runtime_events(self) -> None:
-        """冲刷 RuntimeEventPrinter 中尚未完整输出的工具流残留片段并清空 TTY 状态栏。
-
-        应在每轮 agent 执行结束后、渲染结果前调用，确保 tool_stream 碎片
-        不被遗漏，且 TTY 状态栏不残留在输出前。
-
-        Returns:
-            None: 该方法只负责刷新缓存与清理显示状态。
-        """
-        self._event_printer.flush()
+        """冲刷会话渲染器的暂存状态。"""
+        self._conversation_renderer.flush()
 
     def print_context_events(self, events: tuple[dict, ...]) -> None:
-        """打印 context 治理事件，便于观察 snip/compact 是否生效。
-
-        Args:
-            events (tuple[dict, ...]): context 模块产生的事件元组。
-        Returns:
-            None: 该方法只负责格式化并打印事件到输出流。
-        """
+        """把 context 模块事件翻译为结构化任务事件并渲染。"""
         for event in events:
             event_type = event.get("type", "unknown")
-
-            if event_type == "token_budget":
-                print(
-                    "[Context] budget "
-                    f"projected={event.get('projected')} "
-                    f"soft_over={event.get('is_soft_over')} "
-                    f"hard_over={event.get('is_hard_over')}",
-                    file=self._stream,
-                )
-            elif event_type == "snip_boundary":
-                print(
-                    "[Context] snip "
-                    f"snipped={event.get('snipped_count')} "
-                    f"tokens_removed={event.get('tokens_removed')}",
-                    file=self._stream,
-                )
-            elif event_type == "compact_boundary":
-                trigger = event.get("trigger")
-                print(
-                    "[Context] compact "
-                    f"trigger={trigger} "
-                    f"messages_replaced={event.get('messages_replaced')} "
-                    f"tokens_removed={event.get('tokens_removed')}",
-                    file=self._stream,
-                )
-            elif event_type == "compact_failed":
-                print(
-                    "[Context] compact_failed "
-                    f"trigger={event.get('trigger')} error={event.get('error')}",
-                    file=self._stream,
-                )
-            elif event_type == "reactive_compact_retry":
-                print(
-                    "[Context] reactive_retry "
-                    f"attempt={event.get('attempt')} ok={event.get('ok')}",
-                    file=self._stream,
-                )
-            elif event_type == "backend_error":
-                print(f"[Context] backend_error error={event.get('error')}", file=self._stream)
+            translated = self._translate_context_event(event_type, event)
+            if translated is not None:
+                self.render_task_event(translated)
 
     # ─────────────────────────────────────────────────────────
     # Public API — 用户输入（User Input）
@@ -398,6 +351,66 @@ class InteractionGateway:
         if self._session_tracker is None:
             return SessionSummary()
         return self._session_tracker.to_summary()
+
+    def _translate_context_event(
+        self,
+        event_type: str,
+        event: dict,
+    ) -> TaskProgressEvent | None:
+        if event_type in {"token_budget", "snip_boundary", "compact_boundary", "backend_error"}:
+            return None
+        if event_type == "compact_failed":
+            return TaskProgressEvent(
+                title="Context recovery failed",
+                detail=self._summarize_detail(event.get('error')),
+                status='error',
+                turn=self._read_optional_turn(event),
+            )
+        if event_type == "reactive_compact_retry":
+            if event.get('ok') is not True:
+                return TaskProgressEvent(
+                    title="Context recovery failed",
+                    detail=self._summarize_detail(event.get('error')),
+                    status='error',
+                    turn=self._read_optional_turn(event),
+                )
+            return TaskProgressEvent(
+                title="Retrying after context compaction",
+                detail=(
+                    f"attempt={event.get('attempt')} "
+                    f"messages_replaced={event.get('messages_replaced')} "
+                    f"tokens_removed={event.get('tokens_removed')}"
+                ),
+                status='warning',
+                turn=self._read_optional_turn(event),
+            )
+        return None
+
+    @staticmethod
+    def build_diff_artifact(metadata: Mapping[str, object]) -> CodeDiffArtifact | None:
+        raw = metadata.get('diff_artifact')
+        if not isinstance(raw, Mapping):
+            return None
+        path = raw.get('path')
+        operation = raw.get('operation')
+        diff = raw.get('diff')
+        if not isinstance(path, str) or operation not in {'create', 'update'} or not isinstance(diff, str):
+            return None
+        return CodeDiffArtifact(path=path, operation=operation, diff=diff)
+
+    @staticmethod
+    def _read_optional_turn(event: Mapping[str, object]) -> int | None:
+        turn = event.get('turn')
+        return turn if isinstance(turn, int) else None
+
+    @staticmethod
+    def _summarize_detail(value: object, *, max_length: int = 140) -> str:
+        if not isinstance(value, str):
+            return ''
+        first_line = next((line.strip() for line in value.splitlines() if line.strip()), '')
+        if len(first_line) <= max_length:
+            return first_line
+        return f'{first_line[: max_length - 3].rstrip()}...'
 
 
 __all__ = ['InteractionGateway']

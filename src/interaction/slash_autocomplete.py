@@ -9,21 +9,25 @@
 from __future__ import annotations
 
 import builtins
+import os
 import sys
 from typing import Callable, TextIO
 
 from src.core_contracts.interaction_contracts import SlashAutocompleteEntry
+from src.interaction.input_layout import InputPromptLayout
 
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.formatted_text import FormattedText
+    from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.output.color_depth import ColorDepth
     from prompt_toolkit.shortcuts.prompt import CompleteStyle
     from prompt_toolkit.styles import Style
 except ImportError:  # pragma: no cover - 依赖缺失时走 input() 回退
     PromptSession = None  # type: ignore[assignment,misc]
     FormattedText = None  # type: ignore[assignment,misc]
+    KeyBindings = None  # type: ignore[assignment,misc]
     ColorDepth = None  # type: ignore[assignment,misc]
     CompleteStyle = None  # type: ignore[assignment,misc]
     Completer = object  # type: ignore[assignment,misc]
@@ -123,13 +127,10 @@ class SlashAutocompletePrompt:
     3. prompt_toolkit 不可用时自动降级为内建 input() 或注入的替代函数。
     """
 
-    _PLACEHOLDER_TEXT = 'Type / to browse local slash commands'
-    # str: 输入框空白时显示的占位提示文本。
-
     _PROMPT_STYLE_RULES = {
-        'prompt.label': 'bold #e6edf7',
         'prompt.chevron': 'bold #79d9ea',
-        'placeholder': '#5f7087',
+        'prompt.rule': '#79d9ea',
+        'bottom-toolbar': 'noreverse bg:default',
         'completion-menu': 'bg:default #d7e1ee',
         'completion-menu.completion': 'bg:default #d7e1ee',
         'completion-menu.completion.current': 'noreverse bg:#18222d #eef6ff',
@@ -147,6 +148,8 @@ class SlashAutocompletePrompt:
         'slash-autocomplete.command.current': 'bold #b9f7ff',
     }
     # dict[str, str]: prompt_toolkit 补全菜单与提示符的样式规则表。
+    _PROMPT_RULE_RGB = (0x79, 0xD9, 0xEA)
+    # tuple[int, int, int]: 输入分隔线在 ANSI 终端中的固定颜色。
 
     def __init__(
         self,
@@ -175,6 +178,8 @@ class SlashAutocompletePrompt:
         # TextIO: 用于 isatty() 检测的标准输出流。
         self._catalog = SlashAutocompleteCatalog(entries)
         # SlashAutocompleteCatalog: 当前可用的补全目录，供 completer 查询。
+        self._input_layout = InputPromptLayout()
+        # InputPromptLayout: live prompt 的统一分隔式布局生成器。
         self._session = self._build_prompt_session()
         # PromptSession | None: prompt_toolkit 会话实例；环境不支持时为 None。
 
@@ -190,8 +195,13 @@ class SlashAutocompletePrompt:
             EOFError: 输入流关闭时透传给调用方。
         """
         if self._session is None:
-            return self._fallback_reader(prompt_text)
-        return self._session.prompt(self._format_prompt_message(prompt_text))
+            return self._fallback_reader(self._input_layout.build_plain_prompt())
+        result = self._session.prompt(
+            self._format_prompt_message(prompt_text),
+            bottom_toolbar=self._build_bottom_toolbar(),
+        )
+        self._render_submitted_rule()
+        return result
 
     def _build_prompt_session(self):  # type: ignore[return]
         """在环境支持时创建 prompt_toolkit 会话。
@@ -206,12 +216,12 @@ class SlashAutocompletePrompt:
         return PromptSession(
             completer=_PromptToolkitSlashAutocompleteCompleter(self._catalog),
             complete_while_typing=True,
-            reserve_space_for_menu=15,
+            reserve_space_for_menu=0,
             complete_style=CompleteStyle.COLUMN,
+            key_bindings=self._build_key_bindings(),
             style=self._build_prompt_style(),
             include_default_pygments_style=False,
             color_depth=ColorDepth.TRUE_COLOR,
-            placeholder=self._build_placeholder(),
         )
 
     def _build_prompt_style(self):  # type: ignore[return]
@@ -224,18 +234,6 @@ class SlashAutocompletePrompt:
             return None
         return Style.from_dict(self._PROMPT_STYLE_RULES)
 
-    def _build_placeholder(self):  # type: ignore[return]
-        """构建空输入状态下的灰色占位提示文本。
-
-        Returns:
-            FormattedText | str: prompt_toolkit 可用时返回 FormattedText；否则返回纯字符串。
-        """
-        if FormattedText is None:
-            return self._PLACEHOLDER_TEXT
-        return FormattedText([
-            ('class:placeholder', self._PLACEHOLDER_TEXT),
-        ])
-
     def _format_prompt_message(self, prompt_text: str):  # type: ignore[return]
         """将提示符文本格式化为 prompt_toolkit 支持的样式化消息。
 
@@ -244,19 +242,34 @@ class SlashAutocompletePrompt:
         Returns:
             FormattedText | str: prompt_toolkit 可用时返回已样式化文本；否则返回原始字符串。
         """
+        del prompt_text
         if FormattedText is None:
-            return prompt_text
+            return self._input_layout.build_plain_prompt()
+        return FormattedText(self._input_layout.build_formatted_prompt_fragments())
 
-        normalized_prompt = prompt_text.rstrip()
-        if normalized_prompt.endswith('>'):
-            prompt_label = normalized_prompt[:-1].rstrip()
-            return FormattedText([
-                ('class:prompt.label', prompt_label),
-                ('class:prompt.chevron', '> '),
-            ])
-        return FormattedText([
-            ('class:prompt.label', prompt_text),
-        ])
+    def _build_bottom_toolbar(self):  # type: ignore[return]
+        """构建输入行下方的第二条横线。"""
+        if FormattedText is None:
+            return self._input_layout.build_rule_text()
+        return FormattedText(self._input_layout.build_bottom_toolbar_fragments())
+
+    def _build_key_bindings(self):  # type: ignore[return]
+        """构建输入期按键绑定，避免空输入回车不断堆叠 prompt。"""
+        if KeyBindings is None:
+            return None
+        bindings = KeyBindings()
+
+        @bindings.add('enter')
+        def _handle_enter(event) -> None:
+            buffer = event.app.current_buffer
+            if self._should_accept_input(buffer.text):
+                buffer.validate_and_handle()
+
+        return bindings
+
+    @staticmethod
+    def _should_accept_input(text: str) -> bool:
+        return bool(text.strip())
 
     def _supports_interactive_prompt(self) -> bool:
         """检测当前环境是否支持交互式 prompt_toolkit 输入。
@@ -271,6 +284,31 @@ class SlashAutocompletePrompt:
             and input_is_tty()
             and callable(output_is_tty)
             and output_is_tty()
+        )
+
+    def _render_submitted_rule(self) -> None:
+        """在输入提交后补写一条持久分隔线，避免 toolbar 消失后视觉断层。"""
+        rule = self._input_layout.build_rule_text()
+        if self._supports_ansi_output():
+            red, green, blue = self._PROMPT_RULE_RGB
+            rule = f'\x1b[38;2;{red};{green};{blue}m{rule}\x1b[0m'
+        self._stdout.write(f'{rule}\n')
+        flush = getattr(self._stdout, 'flush', None)
+        if callable(flush):
+            flush()
+
+    def _supports_ansi_output(self) -> bool:
+        """检测当前输出流是否适合直接写入 ANSI 真彩色分隔线。"""
+        if os.getenv('NO_COLOR'):
+            return False
+        output_is_tty = getattr(self._stdout, 'isatty', None)
+        if callable(output_is_tty) and not output_is_tty():
+            return False
+        if os.name != 'nt':
+            return True
+        return any(
+            os.getenv(key)
+            for key in ('WT_SESSION', 'ANSICON', 'ConEmuANSI', 'TERM_PROGRAM', 'TERM')
         )
 
 

@@ -62,10 +62,8 @@ class SessionInteractionTracker:
             None: 该方法只更新追踪器内部状态。
         """
         self.update_session_id(result.session_id or current_session_id)
-        for event in result.events:
-            if event.get('type') != 'tool_result':
-                continue
-            self.observe_tool_result(ok=bool(event.get('ok')))
+        for tool_call in result.tool_calls:
+            self.observe_tool_result(ok=tool_call.ok)
 
     def update_session_id(self, session_id: str | None) -> None:
         """刷新最后一个已知的活动 session id。

@@ -47,4 +47,4 @@ Recent commits use short subject lines with prefixes such as `Feat:`, `Optimizat
 
 ## Security & Configuration Tips
 
-Set `OPENAI_API_KEY` before running the CLI. Optional environment variables include `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, and `RAG_EMBEDDING_MODEL`. Do not commit secrets, `.nexus/sessions/*.json`, or machine-specific MCP credentials.
+Set `OPENAI_API_KEY` before running the CLI. Optional environment variables include `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS` (1-65536, default 4096), and `RAG_EMBEDDING_MODEL`. Do not commit secrets, `.nexus/sessions/*.json`, or machine-specific MCP credentials.

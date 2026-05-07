@@ -169,3 +169,4 @@ class TestConversationOrchestratorPromptHandling:
 
         assert result is state
         orchestrator.agent_gateway.run.assert_called_once_with(state)
+        orchestrator.interaction_gateway.read_input.assert_called()
