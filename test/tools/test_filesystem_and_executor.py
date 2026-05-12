@@ -6,6 +6,7 @@ import pytest
 
 from src.core_contracts.tools_contracts import ToolExecutionRequest
 from src.tools.tool_executor import ToolExecutor
+from src.tools.local.context import ToolRuntimeContext
 from src.tools.local.filesystem_tools import FileSystemToolProvider
 from src.tools.tool_registry import ToolRegistry
 
@@ -21,6 +22,7 @@ def runtime(tmp_path: Path) -> dict[str, object]:
         "root": str(tmp_path),
         "command_timeout_seconds": 5,
         "max_output_chars": 10000,
+        "allow_file_write": True,
     }
 
 
@@ -69,6 +71,51 @@ class TestFileSystemToolProvider:
             tools["read_file"].handler(
                 ToolExecutionRequest(tool_name="read_file", arguments={"path": "../outside.txt"}, runtime=runtime)
             )
+
+    def test_write_requires_file_write_permission(
+        self,
+        fs_provider: FileSystemToolProvider,
+        runtime: dict[str, object],
+    ) -> None:
+        tools = {tool.name: tool for tool in fs_provider.build_tools()}
+        runtime = {**runtime, "allow_file_write": False}
+
+        with pytest.raises(PermissionError, match="File write permission"):
+            tools["write_file"].handler(
+                ToolExecutionRequest(
+                    tool_name="write_file",
+                    arguments={"path": "a.txt", "content": "blocked"},
+                    runtime=runtime,
+                )
+            )
+
+    def test_edit_requires_file_write_permission(
+        self,
+        fs_provider: FileSystemToolProvider,
+        runtime: dict[str, object],
+    ) -> None:
+        tools = {tool.name: tool for tool in fs_provider.build_tools()}
+        tools["write_file"].handler(
+            ToolExecutionRequest(tool_name="write_file", arguments={"path": "a.txt", "content": "old"}, runtime=runtime)
+        )
+        runtime = {**runtime, "allow_file_write": False}
+
+        with pytest.raises(PermissionError, match="File write permission"):
+            tools["edit_file"].handler(
+                ToolExecutionRequest(
+                    tool_name="edit_file",
+                    arguments={"path": "a.txt", "old_text": "old", "new_text": "new"},
+                    runtime=runtime,
+                )
+            )
+
+
+class TestToolRuntimeContext:
+    def test_permission_flags_must_be_booleans(self, runtime: dict[str, object]) -> None:
+        for key in ("allow_file_write", "allow_shell_commands", "allow_destructive_shell_commands"):
+            invalid = {**runtime, key: "true"}
+            with pytest.raises(ValueError, match=key):
+                ToolRuntimeContext.from_payload(invalid)
 
 
 class TestToolExecutor:

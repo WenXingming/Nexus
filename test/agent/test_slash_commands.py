@@ -50,9 +50,12 @@ class TestSessionCommands:
     def test_new_creates_replacement_state(self) -> None:
         session_gateway = MagicMock()
         session_gateway.create_state.return_value = SessionState(session_id='sess-2')
+        session_gateway.create_empty_state.return_value = SessionState(session_id='sess-2')
 
         result = _dispatch('/new', session_gateway=session_gateway)
 
+        session_gateway.create_empty_state.assert_called_once_with()
+        session_gateway.create_state.assert_not_called()
         assert result.replacement_session_state is not None
         assert result.replacement_session_state.session_id == 'sess-2'
 

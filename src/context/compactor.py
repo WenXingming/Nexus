@@ -76,14 +76,14 @@ class Compactor:
         messages: list[Message],
         *,
         preserve_messages: int = 4,
-    ) -> CompactionResult:
-        """调用模型生成摘要并将旧消息原地替换为 compact summary。
+    ) -> tuple[list[Message], CompactionResult]:
+        """调用模型生成摘要，返回替换后的新消息列表和执行结果。
 
         Args:
-            messages (list[Message]): 当前会话消息列表（就地修改）。
+            messages (list[Message]): 当前会话消息列表（不修改原列表）。
             preserve_messages (int): 尾部保留不参与压缩的消息条数。
         Returns:
-            CompactionResult: compact 执行结果，包含是否成功、摘要文本及 token 统计。
+            tuple[list[Message], CompactionResult]: (压缩后的消息列表副本, compact 执行结果)。
         Raises:
             无（模型调用异常被捕获并写入 CompactionResult.error）。
         """
@@ -91,21 +91,21 @@ class Compactor:
         upper_index = self._calculate_upper_index(len(messages), prefix_count, preserve_messages)
 
         if upper_index <= prefix_count:
-            return CompactionResult(compacted=False, error="Not enough messages to compact")
+            return messages[:], CompactionResult(compacted=False, error="Not enough messages to compact")
 
         history_text = self._render_history(messages[prefix_count:upper_index])
         if not history_text:
-            return CompactionResult(compacted=False, error="Nothing renderable to compact")
+            return messages[:], CompactionResult(compacted=False, error="Nothing renderable to compact")
 
         request = self._build_request(history_text)
 
         try:
             response = self._client.chat(request)
         except Exception as exc:
-            return CompactionResult(compacted=False, error=str(exc))
+            return messages[:], CompactionResult(compacted=False, error=str(exc))
 
         if response.tool_calls:
-            return CompactionResult(
+            return messages[:], CompactionResult(
                 compacted=False,
                 usage=response.usage,
                 error="Compact response unexpectedly requested tool calls",
@@ -113,7 +113,7 @@ class Compactor:
 
         summary_text = response.content.strip()
         if not summary_text:
-            return CompactionResult(
+            return messages[:], CompactionResult(
                 compacted=False,
                 usage=response.usage,
                 error="Compact model returned empty summary",
@@ -123,13 +123,12 @@ class Compactor:
         replaced_count = upper_index - prefix_count
         summary_message = self._build_summary_message(summary_text)
 
-        del messages[prefix_count:upper_index]
-        messages.insert(prefix_count, summary_message)
+        new_messages = messages[:prefix_count] + [summary_message] + messages[upper_index:]
 
-        post_tokens = self._estimator.estimate_messages(messages)
-        preserved = min(preserve_messages, max(0, len(messages) - prefix_count - 1))
+        post_tokens = self._estimator.estimate_messages(new_messages)
+        preserved = min(preserve_messages, max(0, len(new_messages) - prefix_count - 1))
 
-        return CompactionResult(
+        return new_messages, CompactionResult(
             compacted=True,
             summary_text=summary_text,
             messages_replaced=replaced_count,

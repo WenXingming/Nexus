@@ -59,14 +59,14 @@ class Snipper:
         messages: list[Message],
         *,
         preserve_messages: int = 4,
-    ) -> SnipResult:
-        """就地剪裁消息列表中的旧候选消息并返回统计结果。
+    ) -> tuple[list[Message], SnipResult]:
+        """剪裁消息列表中的旧候选消息，返回新列表和统计结果。
 
         Args:
-            messages (list[Message]): 待剪裁的消息列表（就地修改）。
+            messages (list[Message]): 待剪裁的消息列表（不修改原列表）。
             preserve_messages (int): 尾部保留的消息条数，不参与剪裁。
         Returns:
-            SnipResult: 本次剪裁的统计快照，含 snipped_count 与 tokens_removed。
+            tuple[list[Message], SnipResult]: (剪裁后的消息列表副本, 本次剪裁的统计快照)。
         Raises:
             无。
         """
@@ -74,21 +74,22 @@ class Snipper:
         tail_count = self._calculate_tail(len(messages), prefix_count, preserve_messages)
         upper_index = len(messages) - tail_count
 
+        new_messages: list[Message] = []
         snipped_count = 0
         tokens_removed = 0
 
-        for index in range(prefix_count, upper_index):
-            message = messages[index]
-            if not self._is_snippable(message):
+        for index, message in enumerate(messages):
+            if index < prefix_count or index >= upper_index or not self._is_snippable(message):
+                new_messages.append(message)
                 continue
             original_tokens = self._estimator.estimate_message(message)
             tombstone = self._make_tombstone(message)
             tombstone_tokens = self._estimator.estimate_message(tombstone)
-            messages[index] = tombstone
+            new_messages.append(tombstone)
             snipped_count += 1
             tokens_removed += max(0, original_tokens - tombstone_tokens)
 
-        return SnipResult(snipped_count=snipped_count, tokens_removed=tokens_removed)
+        return new_messages, SnipResult(snipped_count=snipped_count, tokens_removed=tokens_removed)
 
     # =========================================================================
     # 私有辅助（原子步骤）

@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.client import ClientGateway
 from src.context import ContextGateway
@@ -20,7 +21,7 @@ from src.core_contracts.context_contracts import (
 from src.core_contracts.interaction_contracts import AgentRunResult, TaskProgressEvent, ToolCallRecord
 from src.core_contracts.model_contracts import Message, TokenUsage
 from src.core_contracts.session_contracts import SessionState
-from src.core_contracts.tools_contracts import ToolExecutionRequest
+from src.core_contracts.tools_contracts import JsonDict, ToolExecutionRequest
 from src.interaction import InteractionGateway
 from src.session import SessionGateway
 from src.tools import ToolsGateway
@@ -57,6 +58,9 @@ class AgentLoopExecutor:
     budget_guard: PreModelBudgetGuard
     """PreModelBudgetGuard: 预算守卫。"""
 
+    workspace_root: Path = field(default_factory=Path.cwd)
+    """Path: 工具执行限制的工作区根目录。"""
+
     def execute(self, state: SessionState, max_turns: int = 5) -> SessionState | None:
         """执行 Agent 迭代循环。
 
@@ -69,7 +73,6 @@ class AgentLoopExecutor:
             None
         """
         for turn_index in range(max_turns):
-            # 每轮 turn 开始时动态获取最新工具列表
             tools = self.tools_gateway.list_openai_tools()
             turn_number = turn_index + 1
 
@@ -87,6 +90,7 @@ class AgentLoopExecutor:
                 guard=self.budget_guard,
                 tools=tools,
             )
+            state.messages = run_state.session_messages
             self.interaction_gateway.print_context_events(pre_model.events)
             if pre_model.pre_model_stop is not None:
                 self.interaction_gateway.render_task_event(
@@ -99,69 +103,7 @@ class AgentLoopExecutor:
                 )
                 break
 
-            reactive_attempt = 0
-            result = None
-            self.interaction_gateway.render_task_event(
-                TaskProgressEvent(
-                    title="Thinking",
-                    status='running',
-                    turn=turn_number,
-                )
-            )
-            while True:
-                try:
-                    request = LlmRequest(messages=list(state.messages), tools=tools or None)
-                    result = self.client.chat(request)
-                    run_state.model_call_count += 1
-                    run_state.usage_delta = TokenUsage(
-                        prompt_tokens=run_state.usage_delta.prompt_tokens + result.usage.prompt_tokens,
-                        completion_tokens=run_state.usage_delta.completion_tokens + result.usage.completion_tokens,
-                        total_tokens=run_state.usage_delta.total_tokens + result.usage.total_tokens,
-                    )
-                    break
-                except Exception as exc:
-                    reactive_attempt += 1
-                    self.interaction_gateway.render_task_event(
-                        TaskProgressEvent(
-                            title="Model call failed",
-                            detail=str(exc),
-                            status='warning',
-                            turn=turn_number,
-                        )
-                    )
-                    outcome = self.context_gateway.run_reactive_compact_cycle(
-                        run_state=run_state,
-                        budget_config=self.budget_config,
-                        context_policy=self.context_policy,
-                        tools=tools,
-                        guard=self.budget_guard,
-                        error=exc,
-                        attempt=reactive_attempt,
-                    )
-                    self.interaction_gateway.print_context_events(outcome.events)
-                    if outcome.stop_reason is not None:
-                        self.interaction_gateway.render_task_event(
-                            TaskProgressEvent(
-                                title="Reactive compact stopped retry",
-                                detail=f"reason={outcome.stop_reason}",
-                                status='error',
-                                turn=turn_number,
-                            )
-                        )
-                        result = None
-                        break
-                    if not outcome.retry_model_call:
-                        self.interaction_gateway.render_task_event(
-                            TaskProgressEvent(
-                                title="Model request aborted",
-                                detail="No more recovery steps are available.",
-                                status='error',
-                                turn=turn_number,
-                            )
-                        )
-                        result = None
-                        break
-
+            result = self._invoke_llm(state, run_state, tools, turn_number)
             if result is None:
                 break
 
@@ -191,56 +133,148 @@ class AgentLoopExecutor:
                     tool_calls=result.tool_calls,
                 ),
             )
-
-            for tool_call in result.tool_calls:
-                tool_name = tool_call["function"]["name"]
-                try:
-                    arguments = json.loads(tool_call["function"]["arguments"])
-                except (json.JSONDecodeError, KeyError):
-                    arguments = {}
-                self.interaction_gateway.render_task_event(
-                    TaskProgressEvent(
-                        title=self._build_tool_start_title(tool_name, arguments),
-                        detail=self._build_tool_start_detail(tool_name, arguments),
-                        status='running',
-                        turn=turn_number,
-                    )
-                )
-
-                exec_result = self.tools_gateway.execute_tool(
-                    ToolExecutionRequest(tool_name=tool_name, arguments=arguments)
-                )
-
-                self.interaction_gateway.observe_run_result(
-                    AgentRunResult(
-                        session_id=state.session_id,
-                        tool_calls=(ToolCallRecord(name=tool_name, ok=exec_result.ok),),
-                    ),
-                    current_session_id=state.session_id,
-                )
-
-                diff_artifact = self.interaction_gateway.build_diff_artifact(exec_result.metadata)
-                self.interaction_gateway.render_task_event(
-                    TaskProgressEvent(
-                        title=self._build_tool_finish_title(tool_name, exec_result, diff_artifact),
-                        detail=self._build_tool_finish_detail(exec_result, diff_artifact),
-                        status='success' if exec_result.ok else 'error',
-                        turn=turn_number,
-                        diff=diff_artifact,
-                    )
-                )
-
-                self.session_gateway.append_message(
-                    state,
-                    Message(
-                        role="tool",
-                        content=exec_result.content,
-                        tool_call_id=tool_call["id"],
-                        name=tool_name,
-                    ),
-                )
+            self._execute_tool_calls(state, result.tool_calls, turn_number)
 
         return state
+
+    def _invoke_llm(
+        self,
+        state: SessionState,
+        run_state: ContextRunState,
+        tools: list[dict],
+        turn_number: int,
+    ) -> 'LlmResult | None':
+        """调用 LLM 并处理 reactive compact 重试。
+
+        Args:
+            state: 当前会话状态。
+            run_state: 当前 turn 的运行态。
+            tools: 当前工具 schema 列表。
+            turn_number: 当前 turn 编号（从 1 开始）。
+        Returns:
+            LlmResult | None: 模型响应；所有重试均失败时返回 None。
+        """
+        reactive_attempt = 0
+        self.interaction_gateway.render_task_event(
+            TaskProgressEvent(title="Thinking", status='running', turn=turn_number)
+        )
+        while True:
+            try:
+                request = LlmRequest(messages=list(state.messages), tools=tools or None)
+                result = self.client.chat(request)
+                run_state.model_call_count += 1
+                run_state.usage_delta = TokenUsage(
+                    prompt_tokens=run_state.usage_delta.prompt_tokens + result.usage.prompt_tokens,
+                    completion_tokens=run_state.usage_delta.completion_tokens + result.usage.completion_tokens,
+                    total_tokens=run_state.usage_delta.total_tokens + result.usage.total_tokens,
+                )
+                return result
+            except Exception as exc:
+                reactive_attempt += 1
+                self.interaction_gateway.render_task_event(
+                    TaskProgressEvent(
+                        title="Model call failed",
+                        detail=str(exc),
+                        status='warning',
+                        turn=turn_number,
+                    )
+                )
+                outcome = self.context_gateway.run_reactive_compact_cycle(
+                    run_state=run_state,
+                    budget_config=self.budget_config,
+                    context_policy=self.context_policy,
+                    tools=tools,
+                    guard=self.budget_guard,
+                    error=exc,
+                    attempt=reactive_attempt,
+                )
+                state.messages = run_state.session_messages
+                self.interaction_gateway.print_context_events(outcome.events)
+                if outcome.stop_reason is not None:
+                    self.interaction_gateway.render_task_event(
+                        TaskProgressEvent(
+                            title="Reactive compact stopped retry",
+                            detail=f"reason={outcome.stop_reason}",
+                            status='error',
+                            turn=turn_number,
+                        )
+                    )
+                    return None
+                if not outcome.retry_model_call:
+                    self.interaction_gateway.render_task_event(
+                        TaskProgressEvent(
+                            title="Model request aborted",
+                            detail="No more recovery steps are available.",
+                            status='error',
+                            turn=turn_number,
+                        )
+                    )
+                    return None
+
+    def _execute_tool_calls(
+        self,
+        state: SessionState,
+        tool_calls: list[dict],
+        turn_number: int,
+    ) -> None:
+        """执行一组工具调用并追加结果到会话。
+
+        Args:
+            state: 当前会话状态。
+            tool_calls: 模型返回的 tool_calls 列表。
+            turn_number: 当前 turn 编号。
+        """
+        for tool_call in tool_calls:
+            tool_name = tool_call["function"]["name"]
+            try:
+                arguments = json.loads(tool_call["function"]["arguments"])
+            except (json.JSONDecodeError, KeyError):
+                arguments = {}
+            self.interaction_gateway.render_task_event(
+                TaskProgressEvent(
+                    title=self._build_tool_start_title(tool_name, arguments),
+                    detail=self._build_tool_start_detail(tool_name, arguments),
+                    status='running',
+                    turn=turn_number,
+                )
+            )
+
+            exec_result = self.tools_gateway.execute_tool(
+                ToolExecutionRequest(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    runtime=self._build_tool_runtime(),
+                )
+            )
+
+            self.interaction_gateway.observe_run_result(
+                AgentRunResult(
+                    session_id=state.session_id,
+                    tool_calls=(ToolCallRecord(name=tool_name, ok=exec_result.ok),),
+                ),
+                current_session_id=state.session_id,
+            )
+
+            diff_artifact = self.interaction_gateway.build_diff_artifact(exec_result.metadata)
+            self.interaction_gateway.render_task_event(
+                TaskProgressEvent(
+                    title=self._build_tool_finish_title(tool_name, exec_result, diff_artifact),
+                    detail=self._build_tool_finish_detail(exec_result, diff_artifact),
+                    status='success' if exec_result.ok else 'error',
+                    turn=turn_number,
+                    diff=diff_artifact,
+                )
+            )
+
+            self.session_gateway.append_message(
+                state,
+                Message(
+                    role="tool",
+                    content=exec_result.content,
+                    tool_call_id=tool_call["id"],
+                    name=tool_name,
+                ),
+            )
 
     @staticmethod
     def _build_tool_start_title(tool_name: str, arguments: dict[str, object]) -> str:
@@ -314,5 +348,16 @@ class AgentLoopExecutor:
         if len(first_line) <= max_length:
             return first_line
         return f"{first_line[: max_length - 3].rstrip()}..."
+
+    def _build_tool_runtime(self) -> JsonDict:
+        return {
+            "root": str(self.workspace_root.resolve()),
+            "command_timeout_seconds": 30.0,
+            "max_output_chars": 12000,
+            "allow_file_write": True,
+            "allow_shell_commands": True,
+            "allow_destructive_shell_commands": False,
+            "safe_env": {},
+        }
 
 

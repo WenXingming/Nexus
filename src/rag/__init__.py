@@ -4,7 +4,7 @@
 
 公开导出：
     - RagGateway           : RAG 模块的唯一门面，处理索引与检索流水线编排。
-    - build_rag_gateway    : 标准装配工厂，接收外部依赖并完成全链路注入。
+    - create_rag_gateway   : 标准装配工厂，接收外部依赖并完成全链路注入。
 
 所有请求/结果契约与异常类型均定义在 src.core_contracts.rag_contracts，
 请直接从该模块导入，无需经过本模块转发。
@@ -21,10 +21,10 @@ from src.rag.prompt_builder import PromptBuilder as _PromptBuilder
 from src.rag.rag_gateway import RagGateway
 
 
-__all__ = ['RagGateway', 'build_rag_gateway']
+__all__ = ['RagGateway', 'create_rag_gateway']
 
 
-def build_rag_gateway(
+def create_rag_gateway(
     *,
     model_config: 'ModelConfig',
     rag_config: 'RagModelConfig',

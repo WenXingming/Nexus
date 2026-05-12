@@ -67,16 +67,6 @@ class ConversationOrchestrator:
 
     def _handle_slash(self, user_input: str, state: SessionState) -> SessionState | None:
         """处理 slash 命令并翻译其结果为应用状态。"""
-        parsed = self.interaction_gateway.parse_slash_command(user_input)
-        if parsed is None:
-            print(f"[未知命令] {user_input}")
-            return state
-
-        resolution = self.interaction_gateway.resolve_slash_command(parsed.command_name)
-        if resolution.kind == "none":
-            print(f"[未知命令] {user_input}")
-            return state
-
         cmd_result = self.interaction_gateway.dispatch_slash_command(
             self._build_slash_context(state),
             user_input,

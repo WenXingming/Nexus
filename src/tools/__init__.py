@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from src.core_contracts.tools_contracts import McpToolConfig, ToolDescriptor
-from src.tools.tool_executor import ToolExecutor
-from src.tools.local.filesystem_tools import FileSystemToolProvider
-from src.tools.local.shell_tools import ShellToolProvider
-from src.tools.mcp import McpToolProvider
-from src.tools.mcp.async_mcp_tools import AsyncMcpToolProvider
-from src.tools.tool_registry import ToolRegistry
+from src.tools.tool_executor import ToolExecutor as _ToolExecutor
+from src.tools.local.filesystem_tools import FileSystemToolProvider as _FileSystemToolProvider
+from src.tools.local.shell_tools import ShellToolProvider as _ShellToolProvider
+from src.tools.mcp import McpToolProvider as _McpToolProvider
+from src.tools.mcp.async_mcp_tools import AsyncMcpToolProvider as _AsyncMcpToolProvider
+from src.tools.tool_registry import ToolRegistry as _ToolRegistry
 from src.tools.tools_gateway import ToolsGateway
 
 
 def create_gateway(
-    mcp_provider: McpToolProvider | None = None,
+    mcp_provider: _McpToolProvider | None = None,
     *,
     mcp_config: McpToolConfig | None = None,
     async_mode: bool = False,
@@ -28,8 +28,8 @@ def create_gateway(
     Returns:
         ToolsGateway: 工具网关实例。
     """
-    file_tools = FileSystemToolProvider().build_tools()
-    shell_tool = ShellToolProvider().build_tool()
+    file_tools = _FileSystemToolProvider().build_tools()
+    shell_tool = _ShellToolProvider().build_tool()
     local_tools = (*file_tools, shell_tool)
 
     if async_mode and mcp_config is not None:
@@ -40,19 +40,19 @@ def create_gateway(
 
 def _create_sync_gateway(
     local_tools: tuple[ToolDescriptor, ...],
-    mcp_provider: McpToolProvider | None,
+    mcp_provider: _McpToolProvider | None,
     mcp_config: McpToolConfig | None,
 ) -> ToolsGateway:
     """创建同步模式的 ToolsGateway。"""
     if mcp_provider is None and mcp_config is not None:
-        mcp_provider = McpToolProvider(config_path=mcp_config.config_path)
+        mcp_provider = _McpToolProvider(config_path=mcp_config.config_path)
     mcp_tools = mcp_provider.build_tools() if mcp_provider else ()
 
     local_names = {t.name for t in local_tools}
     resolved_mcp_tools = _resolve_name_conflicts(mcp_tools, local_names)
 
-    tools_registry = ToolRegistry.from_tools(*local_tools, *resolved_mcp_tools)
-    tools_executor = ToolExecutor()
+    tools_registry = _ToolRegistry.from_tools(*local_tools, *resolved_mcp_tools)
+    tools_executor = _ToolExecutor()
     return ToolsGateway(
         local_executor=tools_executor,
         tool_registry=tools_registry,
@@ -67,10 +67,10 @@ def _create_async_gateway(
 
     本地工具立即注册，MCP 工具在后台异步加载。
     """
-    tools_registry = ToolRegistry.from_tools(*local_tools)
-    tools_executor = ToolExecutor()
+    tools_registry = _ToolRegistry.from_tools(*local_tools)
+    tools_executor = _ToolExecutor()
 
-    async_provider = AsyncMcpToolProvider(config_path=mcp_config.config_path)
+    async_provider = _AsyncMcpToolProvider(config_path=mcp_config.config_path)
     async_provider.start_async_loading()
 
     return ToolsGateway(
@@ -103,4 +103,4 @@ def _resolve_name_conflicts(
     return tuple(resolved)
 
 
-__all__ = ["McpToolProvider", "AsyncMcpToolProvider", "ToolsGateway", "create_gateway"]
+__all__ = ["ToolsGateway", "create_gateway"]

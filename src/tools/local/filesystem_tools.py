@@ -166,6 +166,7 @@ class FileSystemToolProvider:
 
     def _write_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
+        self._require_file_write_permission(runtime)
         raw_path = require_string(request.arguments, "path")
         content = require_string(request.arguments, "content")
         target = self._resolve_workspace_path(runtime, raw_path, must_exist=False)
@@ -193,6 +194,7 @@ class FileSystemToolProvider:
 
     def _edit_file(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
+        self._require_file_write_permission(runtime)
         raw_path = require_string(request.arguments, "path")
         old_text = require_string(request.arguments, "old_text")
         new_text = require_string(request.arguments, "new_text")
@@ -321,3 +323,7 @@ class FileSystemToolProvider:
         if min_value is not None and value < min_value:
             raise ValueError(f'Argument "{key}" must be >= {min_value}')
         return value
+
+    def _require_file_write_permission(self, runtime: ToolRuntimeContext) -> None:
+        if not runtime.allow_file_write:
+            raise PermissionError("File write permission is not enabled.")

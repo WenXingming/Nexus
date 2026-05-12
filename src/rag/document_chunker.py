@@ -41,7 +41,7 @@ class DocumentChunker:
             RagError: chunk_size <= 0 或 chunk_overlap >= chunk_size 时抛出。
         """
         self._validate_chunk_parameters(chunk_size, chunk_overlap)
-        step = self._calculate_step(chunk_size, chunk_overlap)
+        step = chunk_size - chunk_overlap
         segments = self._split_content_into_segments(document.content, chunk_size, step)
         return self._build_chunk_list(document, segments)
 
@@ -62,17 +62,6 @@ class DocumentChunker:
             raise RagError(
                 f"chunk_overlap ({chunk_overlap}) 必须小于 chunk_size ({chunk_size})"
             )
-
-    def _calculate_step(self, chunk_size: int, chunk_overlap: int) -> int:
-        """计算滑动窗口步长。
-
-        Args:
-            chunk_size (int): 每个分块的最大字符数。
-            chunk_overlap (int): 相邻分块间的重叠字符数。
-        Returns:
-            int: 滑动窗口步长（chunk_size - chunk_overlap）。
-        """
-        return chunk_size - chunk_overlap
 
     def _split_content_into_segments(self, content: str, chunk_size: int, step: int) -> list[str]:
         """使用滑动窗口策略将纯文本切分为字符串片段列表。
@@ -97,9 +86,10 @@ class DocumentChunker:
             stripped = content[start:end].strip()
             if stripped:
                 segments.append(stripped)
-            start += step
-            if step <= 0:
-                break
+            next_start = end - (chunk_size - step)
+            if next_start <= start:
+                next_start = start + step
+            start = next_start
 
         return segments
 

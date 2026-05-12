@@ -42,7 +42,7 @@ The main runtime flow is:
 ## Key conventions
 
 - Preserve package boundaries. External code should import from package `__init__.py` entrypoints and `src/core_contracts/*`, not internal implementation modules, unless a white-box test needs it.
-- Keep the gateway pattern intact. Public APIs are gateway-oriented, with factory functions such as `create_gateway`, `create_interaction_gateway`, and `build_rag_gateway` assembling dependencies via constructor injection.
+- Keep the gateway pattern intact. Public APIs are gateway-oriented, with factory functions such as `create_gateway`, `create_interaction_gateway`, and `create_rag_gateway` assembling dependencies via constructor injection.
 - Treat `src/core_contracts/` as the shared boundary. Contract dataclasses are generally frozen; `SessionState` is the main intentional mutable exception because it is the live runtime session object.
 - Keep orchestration in the designated layers:
   - `src/main.py` owns composition-root wiring

@@ -177,9 +177,9 @@ class TestCreateGatewayAsyncMode:
 
     def test_create_gateway_async_mode(self) -> None:
         """异步模式应创建 AsyncMcpToolProvider 并启动加载。"""
-        with patch('src.tools.AsyncMcpToolProvider') as mock_provider_cls, \
-            patch('src.tools.FileSystemToolProvider') as fs_provider, \
-            patch('src.tools.ShellToolProvider') as shell_provider:
+        with patch('src.tools._AsyncMcpToolProvider') as mock_provider_cls, \
+            patch('src.tools._FileSystemToolProvider') as fs_provider, \
+            patch('src.tools._ShellToolProvider') as shell_provider:
 
             fs_provider.return_value.build_tools.return_value = ()
             shell_provider.return_value.build_tool.return_value = _make_descriptor('bash')
@@ -197,9 +197,9 @@ class TestCreateGatewayAsyncMode:
 
     def test_create_gateway_sync_mode_default(self) -> None:
         """默认模式应使用同步加载。"""
-        with patch('src.tools.McpToolProvider') as mcp_provider_cls, \
-            patch('src.tools.FileSystemToolProvider') as fs_provider, \
-            patch('src.tools.ShellToolProvider') as shell_provider:
+        with patch('src.tools._McpToolProvider') as mcp_provider_cls, \
+            patch('src.tools._FileSystemToolProvider') as fs_provider, \
+            patch('src.tools._ShellToolProvider') as shell_provider:
 
             fs_provider.return_value.build_tools.return_value = ()
             shell_provider.return_value.build_tool.return_value = _make_descriptor('bash')

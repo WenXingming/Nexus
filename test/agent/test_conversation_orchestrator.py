@@ -111,13 +111,19 @@ class TestConversationOrchestratorSlashHandling:
     def test_unknown_command_keeps_state(self) -> None:
         orchestrator = _make_orchestrator()
         state = _make_state()
-        orchestrator.interaction_gateway.parse_slash_command.return_value = MagicMock(command_name='unknown')
-        orchestrator.interaction_gateway.resolve_slash_command.return_value = MagicMock(kind='none')
+        orchestrator.interaction_gateway.dispatch_slash_command.return_value = SlashCommandResult(
+            handled=True,
+            continue_query=False,
+            command_name='unknown',
+            output='Unknown slash command: /unknown',
+            metadata={'error': 'unknown_command'},
+        )
 
         result = orchestrator._handle_slash('/unknown', state)
 
         assert result is state
-        orchestrator.interaction_gateway.dispatch_slash_command.assert_not_called()
+        orchestrator.interaction_gateway.dispatch_slash_command.assert_called_once()
+        orchestrator.interaction_gateway.render_slash_result.assert_called_once()
 
     def test_rag_index_dispatches_with_built_context(self) -> None:
         orchestrator = _make_orchestrator()
