@@ -49,48 +49,6 @@ class ToolRuntimeContext:
     _KEY_SAFE_ENV = "safe_env"
 
     @staticmethod
-    def build_payload(
-        workspace_root: Path,
-        command_timeout_seconds: float,
-        max_output_chars: int,
-        *,
-        allow_file_write: bool = False,
-        allow_shell_commands: bool = False,
-        allow_destructive_shell_commands: bool = False,
-        safe_env: dict[str, str] | None = None,
-    ) -> JsonDict:
-        """序列化：供外部调用者生成运行时字典。
-
-        Args:
-            workspace_root: 工作区根目录。
-            command_timeout_seconds: Shell 命令超时秒数。
-            max_output_chars: 工具输出最大字符数。
-            allow_file_write: 是否允许写文件。
-            allow_shell_commands: 是否允许执行 Shell 命令。
-            allow_destructive_shell_commands: 是否允许破坏性 Shell 命令。
-            safe_env: 注入的安全环境变量。
-
-        Returns:
-            JsonDict: 校验后的运行时参数字典。
-
-        Raises:
-            ValueError: 当 timeout 或 max_output 非正数时抛出。
-        """
-        if command_timeout_seconds <= 0:
-            raise ValueError("command_timeout_seconds 必须大于 0。")
-        if max_output_chars <= 0:
-            raise ValueError("max_output_chars 必须大于 0。")
-        return {
-            ToolRuntimeContext._KEY_ROOT: str(workspace_root.resolve()),
-            ToolRuntimeContext._KEY_TIMEOUT: float(command_timeout_seconds),
-            ToolRuntimeContext._KEY_MAX_OUTPUT: max_output_chars,
-            ToolRuntimeContext._KEY_ALLOW_WRITE: allow_file_write,
-            ToolRuntimeContext._KEY_ALLOW_SHELL: allow_shell_commands,
-            ToolRuntimeContext._KEY_ALLOW_DESTRUCTIVE: allow_destructive_shell_commands,
-            ToolRuntimeContext._KEY_SAFE_ENV: dict(safe_env or {}),
-        }
-
-    @staticmethod
     def from_payload(payload: JsonDict) -> "ToolRuntimeContext":
         """反序列化：从运行时字典构建强类型上下文。
 
@@ -107,9 +65,9 @@ class ToolRuntimeContext:
         root_value = payload.get(K._KEY_ROOT, ".")
         timeout_value = payload.get(K._KEY_TIMEOUT, 30.0)
         max_output_value = payload.get(K._KEY_MAX_OUTPUT, 12000)
-        allow_file_write = bool(payload.get(K._KEY_ALLOW_WRITE, False))
-        allow_shell_commands = bool(payload.get(K._KEY_ALLOW_SHELL, False))
-        allow_destructive = bool(payload.get(K._KEY_ALLOW_DESTRUCTIVE, False))
+        allow_file_write = K._read_bool(payload.get(K._KEY_ALLOW_WRITE, False), f"runtime.{K._KEY_ALLOW_WRITE}")
+        allow_shell_commands = K._read_bool(payload.get(K._KEY_ALLOW_SHELL, False), f"runtime.{K._KEY_ALLOW_SHELL}")
+        allow_destructive = K._read_bool(payload.get(K._KEY_ALLOW_DESTRUCTIVE, False), f"runtime.{K._KEY_ALLOW_DESTRUCTIVE}")
         safe_env_value = payload.get(K._KEY_SAFE_ENV, {})
 
         if not isinstance(root_value, str) or not root_value.strip():
@@ -136,3 +94,9 @@ class ToolRuntimeContext:
             allow_destructive_shell_commands=allow_destructive,
             safe_env=safe_env,
         )
+
+    @staticmethod
+    def _read_bool(value: object, field_name: str) -> bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"{field_name} 必须为布尔值。")
+        return value

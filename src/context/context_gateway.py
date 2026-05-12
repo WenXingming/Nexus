@@ -112,21 +112,21 @@ class ContextGateway:
         messages: list[Message],
         *,
         preserve_messages: int = 4,
-    ) -> CompactionResult:
+    ) -> tuple[list[Message], CompactionResult]:
         """手动触发 context compact。
 
         供 /compact 等用户命令调用，将旧对话历史压缩为摘要。
 
         Args:
-            messages (list[Message]): 当前会话消息列表（就地修改）。
+            messages (list[Message]): 当前会话消息列表（不修改原列表）。
             preserve_messages (int): 尾部保留不参与压缩的消息条数。
         Returns:
-            CompactionResult: compact 执行结果。
+            tuple[list[Message], CompactionResult]: (压缩后的消息列表副本, compact 执行结果)。
         Raises:
             无。
         """
         if self._compactor is None:
-            return CompactionResult(compacted=False, error="Compactor not available")
+            return messages[:], CompactionResult(compacted=False, error="Compactor not available")
         return self._compactor.compact(messages, preserve_messages=preserve_messages)
 
     def run_pre_model_cycle(
@@ -160,12 +160,12 @@ class ContextGateway:
         snapshot = self._project_budget(run_state.session_messages, budget_config, tools)
 
         if snapshot.is_soft_over:
-            snip_result = self._snipper.snip(
+            run_state.session_messages, snip_result = self._snipper.snip(
                 run_state.session_messages,
                 preserve_messages=context_policy.compact_preserve_messages,
             )
             if snip_result.snipped_count > 0:
-                events.append(self._build_snip_event(run_state.turn_index, snip_result))
+                events.append(_build_snip_event(run_state.turn_index, snip_result))
                 snapshot = self._project_budget(run_state.session_messages, budget_config, tools)
 
         stop = self._check_guard(guard, run_state, snapshot)
@@ -175,19 +175,19 @@ class ContextGateway:
             and self._compactor is not None
             and self._should_auto_compact(snapshot, context_policy)
         ):
-            compact_result = self._compactor.compact(
+            run_state.session_messages, compact_result = self._compactor.compact(
                 run_state.session_messages,
                 preserve_messages=context_policy.compact_preserve_messages,
             )
             if compact_result.compacted:
                 run_state.model_call_count += 1
                 run_state.usage_delta = _add_usage(run_state.usage_delta, compact_result.usage)
-                events.append(self._build_compact_event(run_state.turn_index, "auto", compact_result))
+                events.append(_build_compact_event(run_state.turn_index, "auto", compact_result))
                 snapshot = self._project_budget(run_state.session_messages, budget_config, tools)
                 stop = self._check_guard(guard, run_state, snapshot)
             elif compact_result.error:
                 events.append(
-                    self._build_compact_failed_event(
+                    _build_compact_failed_event(
                         run_state.turn_index,
                         "auto",
                         compact_result.error,
@@ -195,7 +195,7 @@ class ContextGateway:
                     )
                 )
 
-        events.append(self._build_budget_event(run_state.turn_index, snapshot))
+        events.append(_build_budget_event(run_state.turn_index, snapshot))
         run_state.token_budget_snapshot = snapshot
 
         return PreModelContextOutcome(pre_model_stop=stop, events=tuple(events))
@@ -233,22 +233,22 @@ class ContextGateway:
         compactor = self._compactor
         context_error = str(error)
         if compactor is None or not compactor.is_context_length_error(error):
-            events.append(self._build_error_event(run_state.turn_index, context_error))
+            events.append(_build_error_event(run_state.turn_index, context_error))
             return ReactiveCompactOutcome(retry_model_call=False, stop_reason=None, events=tuple(events))
 
         if attempt > _MAX_REACTIVE_RETRIES:
-            events.append(self._build_error_event(run_state.turn_index, context_error))
+            events.append(_build_error_event(run_state.turn_index, context_error))
             return ReactiveCompactOutcome(retry_model_call=False, stop_reason=None, events=tuple(events))
 
         preserve_messages = max(1, context_policy.compact_preserve_messages - (attempt - 1))
-        compact_result = compactor.compact(
+        run_state.session_messages, compact_result = compactor.compact(
             run_state.session_messages,
             preserve_messages=preserve_messages,
         )
 
         if not compact_result.compacted:
             events.append(
-                self._build_reactive_failed_event(
+                _build_reactive_failed_event(
                     run_state.turn_index,
                     attempt,
                     preserve_messages,
@@ -256,14 +256,14 @@ class ContextGateway:
                     compact_result.error or "No progress made",
                 )
             )
-            events.append(self._build_error_event(run_state.turn_index, context_error))
+            events.append(_build_error_event(run_state.turn_index, context_error))
             return ReactiveCompactOutcome(retry_model_call=False, stop_reason=None, events=tuple(events))
 
         run_state.model_call_count += 1
         run_state.usage_delta = _add_usage(run_state.usage_delta, compact_result.usage)
-        events.append(self._build_compact_event(run_state.turn_index, "reactive", compact_result, attempt=attempt))
+        events.append(_build_compact_event(run_state.turn_index, "reactive", compact_result, attempt=attempt))
         events.append(
-            self._build_reactive_ok_event(
+            _build_reactive_ok_event(
                 run_state.turn_index,
                 attempt,
                 preserve_messages,
@@ -353,189 +353,112 @@ class ContextGateway:
             return False
         return snapshot.projected_input_tokens >= max(0, context_policy.auto_compact_threshold_tokens)
 
-    # =========================================================================
-    # 事件构造辅助（纯数据组装，无业务逻辑）
-    # =========================================================================
+    # 事件构造委托给模块级函数 _build_*_event()
 
-    @staticmethod
-    def _build_budget_event(turn_index: int, snapshot: BudgetProjection) -> dict:
-        """构造 token_budget 事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            snapshot (BudgetProjection): 当前预算快照。
-        Returns:
-            dict: token_budget 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "token_budget",
-            "turn": turn_index,
-            "projected": snapshot.projected_input_tokens,
-            "hard_input_limit": snapshot.hard_input_limit,
-            "soft_input_limit": snapshot.soft_input_limit,
-            "is_hard_over": snapshot.is_hard_over,
-            "is_soft_over": snapshot.is_soft_over,
-        }
+# =========================================================================
+# 事件构造辅助（模块级纯函数，无业务逻辑）
+# =========================================================================
 
-    @staticmethod
-    def _build_snip_event(turn_index: int, result: SnipResult) -> dict:
-        """构造 snip_boundary 事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            result (SnipResult): snip 执行结果。
-        Returns:
-            dict: snip_boundary 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "snip_boundary",
-            "turn": turn_index,
-            "snipped_count": result.snipped_count,
-            "tokens_removed": result.tokens_removed,
-        }
+def _build_budget_event(turn_index: int, snapshot: BudgetProjection) -> dict:
+    return {
+        "type": "token_budget",
+        "turn": turn_index,
+        "projected": snapshot.projected_input_tokens,
+        "hard_input_limit": snapshot.hard_input_limit,
+        "soft_input_limit": snapshot.soft_input_limit,
+        "is_hard_over": snapshot.is_hard_over,
+        "is_soft_over": snapshot.is_soft_over,
+    }
 
-    @staticmethod
-    def _build_compact_event(
-        turn_index: int,
-        trigger: str,
-        result: CompactionResult,
-        *,
-        attempt: int | None = None,
-    ) -> dict:
-        """构造 compact_boundary 事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            trigger (str): 触发源，'auto' 或 'reactive'。
-            result (CompactionResult): compact 执行结果。
-            attempt (int | None): reactive 重试序号；auto 场景传 None。
-        Returns:
-            dict: compact_boundary 事件字典。
-        Raises:
-            无。
-        """
-        event: dict = {
-            "type": "compact_boundary",
-            "turn": turn_index,
-            "trigger": trigger,
-            "messages_replaced": result.messages_replaced,
-            "tokens_removed": result.tokens_removed,
-            "pre_tokens": result.pre_tokens,
-            "post_tokens": result.post_tokens,
-            "preserve_messages": result.preserve_messages_used,
-        }
-        if attempt is not None:
-            event["attempt"] = attempt
-        return event
+def _build_snip_event(turn_index: int, result: SnipResult) -> dict:
+    return {
+        "type": "snip_boundary",
+        "turn": turn_index,
+        "snipped_count": result.snipped_count,
+        "tokens_removed": result.tokens_removed,
+    }
 
-    @staticmethod
-    def _build_compact_failed_event(
-        turn_index: int,
-        trigger: str,
-        error: str,
-        preserve_messages: int,
-    ) -> dict:
-        """构造 compact_failed 事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            trigger (str): 触发源（'auto' 或 'reactive'）。
-            error (str): compact 失败原因。
-            preserve_messages (int): 本次尾部保留消息数。
-        Returns:
-            dict: compact_failed 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "compact_failed",
-            "turn": turn_index,
-            "trigger": trigger,
-            "error": error,
-            "preserve_messages": preserve_messages,
-        }
+def _build_compact_event(
+    turn_index: int,
+    trigger: str,
+    result: CompactionResult,
+    *,
+    attempt: int | None = None,
+) -> dict:
+    event: dict = {
+        "type": "compact_boundary",
+        "turn": turn_index,
+        "trigger": trigger,
+        "messages_replaced": result.messages_replaced,
+        "tokens_removed": result.tokens_removed,
+        "pre_tokens": result.pre_tokens,
+        "post_tokens": result.post_tokens,
+        "preserve_messages": result.preserve_messages_used,
+    }
+    if attempt is not None:
+        event["attempt"] = attempt
+    return event
 
-    @staticmethod
-    def _build_reactive_ok_event(
-        turn_index: int,
-        attempt: int,
-        preserve_messages: int,
-        context_error: str,
-        result: CompactionResult,
-    ) -> dict:
-        """构造 reactive_compact_retry 成功事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            attempt (int): reactive 重试序号。
-            preserve_messages (int): 本次 retry 尾部保留消息数。
-            context_error (str): 触发 retry 的原始上下文错误文本。
-            result (CompactionResult): compact 成功结果。
-        Returns:
-            dict: reactive_compact_retry (ok=True) 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "reactive_compact_retry",
-            "turn": turn_index,
-            "attempt": attempt,
-            "preserve_messages": preserve_messages,
-            "context_error": context_error,
-            "ok": True,
-            "tokens_removed": result.tokens_removed,
-            "messages_replaced": result.messages_replaced,
-        }
+def _build_compact_failed_event(
+    turn_index: int,
+    trigger: str,
+    error: str,
+    preserve_messages: int,
+) -> dict:
+    return {
+        "type": "compact_failed",
+        "turn": turn_index,
+        "trigger": trigger,
+        "error": error,
+        "preserve_messages": preserve_messages,
+    }
 
-    @staticmethod
-    def _build_reactive_failed_event(
-        turn_index: int,
-        attempt: int,
-        preserve_messages: int,
-        context_error: str,
-        error: str,
-    ) -> dict:
-        """构造 reactive_compact_retry 失败事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            attempt (int): reactive 重试序号。
-            preserve_messages (int): 本次 retry 尾部保留消息数。
-            context_error (str): 触发 retry 的原始上下文错误文本。
-            error (str): compact 失败原因。
-        Returns:
-            dict: reactive_compact_retry (ok=False) 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "reactive_compact_retry",
-            "turn": turn_index,
-            "attempt": attempt,
-            "preserve_messages": preserve_messages,
-            "context_error": context_error,
-            "ok": False,
-            "error": error,
-        }
+def _build_reactive_ok_event(
+    turn_index: int,
+    attempt: int,
+    preserve_messages: int,
+    context_error: str,
+    result: CompactionResult,
+) -> dict:
+    return {
+        "type": "reactive_compact_retry",
+        "turn": turn_index,
+        "attempt": attempt,
+        "preserve_messages": preserve_messages,
+        "context_error": context_error,
+        "ok": True,
+        "tokens_removed": result.tokens_removed,
+        "messages_replaced": result.messages_replaced,
+    }
 
-    @staticmethod
-    def _build_error_event(turn_index: int, error: str) -> dict:
-        """构造 backend_error 事件字典。
 
-        Args:
-            turn_index (int): 当前 turn 序号。
-            error (str): 错误描述文本。
-        Returns:
-            dict: backend_error 事件字典。
-        Raises:
-            无。
-        """
-        return {
-            "type": "backend_error",
-            "turn": turn_index,
-            "error": error,
-        }
+def _build_reactive_failed_event(
+    turn_index: int,
+    attempt: int,
+    preserve_messages: int,
+    context_error: str,
+    error: str,
+) -> dict:
+    return {
+        "type": "reactive_compact_retry",
+        "turn": turn_index,
+        "attempt": attempt,
+        "preserve_messages": preserve_messages,
+        "context_error": context_error,
+        "ok": False,
+        "error": error,
+    }
+
+
+def _build_error_event(turn_index: int, error: str) -> dict:
+    return {
+        "type": "backend_error",
+        "turn": turn_index,
+        "error": error,
+    }

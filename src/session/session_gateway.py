@@ -126,6 +126,10 @@ class SessionGateway:
         """
         return self._session_state.build_new(prompt)
 
+    def create_empty_state(self) -> SessionState:
+        """创建没有初始用户消息的全新运行态会话状态。"""
+        return self._session_state.build_empty()
+
     def resume_state(
         self,
         session_id: str,

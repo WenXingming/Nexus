@@ -1,9 +1,6 @@
 """ToolsGateway 单元测试。"""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.core_contracts.tools_contracts import (
     McpToolConfig,
@@ -12,7 +9,6 @@ from src.core_contracts.tools_contracts import (
     ToolExecutionResult,
 )
 from src.tools import create_gateway
-from src.tools.local.context import ToolRuntimeContext
 from src.tools.tool_registry import ToolRegistry
 from src.tools.tools_gateway import ToolsGateway
 
@@ -92,19 +88,11 @@ class TestToolsGateway:
         assert passed_registry is gateway.tool_registry
 
 
-class TestRuntimeFactory:
-    """验证运行时工厂函数行为。"""
-
-    def test_build_runtime_rejects_invalid_values(self) -> None:
-        with pytest.raises(ValueError):
-            ToolRuntimeContext.build_payload(Path("."), command_timeout_seconds=0, max_output_chars=100)
-
-
 class TestToolsFactory:
     def test_create_gateway_uses_mcp_contract_config_path(self) -> None:
-        with patch('src.tools.FileSystemToolProvider') as fs_provider, \
-            patch('src.tools.ShellToolProvider') as shell_provider, \
-            patch('src.tools.McpToolProvider') as mcp_provider_cls:
+        with patch('src.tools._FileSystemToolProvider') as fs_provider, \
+            patch('src.tools._ShellToolProvider') as shell_provider, \
+            patch('src.tools._McpToolProvider') as mcp_provider_cls:
             fs_provider.return_value.build_tools.return_value = ()
             shell_provider.return_value.build_tool.return_value = _make_descriptor('bash')
             mcp_provider_cls.return_value.build_tools.return_value = ()

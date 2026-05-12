@@ -53,7 +53,7 @@ class TestApplicationDependencies:
             patch("src.main.create_context_gateway", return_value=context_gateway), \
             patch("src.main.create_session_gateway", return_value=session_gateway), \
             patch("src.main.create_tools_gateway", return_value=tools_gateway), \
-            patch("src.main.build_rag_gateway", return_value=rag_gateway), \
+            patch("src.main.create_rag_gateway", return_value=rag_gateway), \
             patch("src.main.create_interaction_gateway", return_value=interaction_gateway), \
             patch("src.main.create_agent_gateway", return_value=agent_gateway), \
             patch("src.main.create_conversation_orchestrator", return_value=conversation_orchestrator), \
@@ -95,6 +95,19 @@ class TestApplicationRun:
 
         app._conversation_orchestrator.run.assert_called_once_with(state)
         assert result == 0
+
+    def test_init_session_creates_empty_state(self, state: SessionState) -> None:
+        app = main_module.Application()
+        app._workspace_config = MagicMock(root=Path("D:/WorkSpace/Nexus"))
+        app._interaction_gateway = MagicMock()
+        app._session_gateway = MagicMock()
+        app._session_gateway.create_empty_state.return_value = state
+
+        result = app._init_session()
+
+        assert result is state
+        app._session_gateway.create_empty_state.assert_called_once_with()
+        app._session_gateway.create_state.assert_not_called()
 
 
 # ============================================================

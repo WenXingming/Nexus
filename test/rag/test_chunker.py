@@ -148,3 +148,11 @@ class TestBreakPointStrategy:
         assert len(result) > 1
         # 第一块应以句末标点结尾（或不含后续内容）
         assert result[0].content.endswith('.')
+
+    def test_natural_break_does_not_skip_following_text(self, chunker: DocumentChunker) -> None:
+        content = '123456789.abcdefghij'
+        doc = RagDocument(doc_id='coverage', content=content)
+
+        result = chunker.chunk(doc, chunk_size=12, chunk_overlap=0)
+
+        assert ''.join(chunk.content for chunk in result) == content

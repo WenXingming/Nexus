@@ -35,6 +35,7 @@ class ShellToolProvider:
     def _run(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         runtime = ToolRuntimeContext.from_payload(request.runtime)
         command = require_string(request.arguments, "command")
+        self._require_shell_permission(runtime, command)
 
         environment = dict(os.environ)
         environment.update(runtime.safe_env)
@@ -58,7 +59,7 @@ class ShellToolProvider:
         output = truncate_output(rendered, runtime.max_output_chars)
         return ToolExecutionResult(
             name=request.tool_name,
-            ok=True,
+            ok=int(completed.returncode) == 0,
             content=output,
             metadata={
                 "action": "bash",
@@ -77,3 +78,21 @@ class ShellToolProvider:
         ]
         return "\n".join(lines).strip()
 
+    def _require_shell_permission(self, runtime: ToolRuntimeContext, command: str) -> None:
+        if not runtime.allow_shell_commands:
+            raise PermissionError("Shell command permission is not enabled.")
+        if not runtime.allow_destructive_shell_commands and self._looks_destructive(command):
+            raise PermissionError("Destructive shell command permission is not enabled.")
+
+    def _looks_destructive(self, command: str) -> bool:
+        normalized = " ".join(command.lower().split())
+        if "remove-item" in normalized and "-recurse" in normalized:
+            return True
+        destructive_markers = (
+            "rm -rf",
+            "del /s",
+            "rmdir /s",
+            "rd /s",
+            "format ",
+        )
+        return any(marker in normalized for marker in destructive_markers)

@@ -1,6 +1,6 @@
 """RAG 工厂装配测试。
 
-验证 build_rag_gateway 在模块入口内部创建 OpenAIEmbeddingProvider，
+验证 create_rag_gateway 在模块入口内部创建 OpenAIEmbeddingProvider，
 调用方无需感知 embeddings provider 具体实现。
 """
 
@@ -9,16 +9,16 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from src.core_contracts.model_config import ModelConfig, RagModelConfig
-from src.rag import build_rag_gateway
+from src.rag import create_rag_gateway
 
 
-def test_build_rag_gateway_creates_embedding_provider_internally() -> None:
+def test_create_rag_gateway_creates_embedding_provider_internally() -> None:
     model_config = ModelConfig(api_key="sk-test", model_name="gpt-4o-mini")
     rag_config = RagModelConfig(embedding_model="text-embedding-3-small")
 
     with patch("src.rag._OpenAIEmbeddingProvider") as mock_provider, \
         patch("src.rag._DocumentLoader") as mock_loader:
-        gateway = build_rag_gateway(
+        gateway = create_rag_gateway(
             model_config=model_config,
             rag_config=rag_config,
         )

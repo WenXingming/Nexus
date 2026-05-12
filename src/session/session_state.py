@@ -64,6 +64,10 @@ class SessionStateRuntime:
         self.append_user(state, normalized_prompt)
         return state
 
+    def build_empty(self) -> SessionState:
+        """创建没有任何消息的全新会话状态。"""
+        return SessionState(session_id=generate_session_id())
+
     def build_from_persisted(
         self,
         session_id: str,

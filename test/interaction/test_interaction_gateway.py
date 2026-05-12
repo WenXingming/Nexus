@@ -455,11 +455,10 @@ class TestHandleClear:
         result = self.d.dispatch_slash_command(ctx, '/clear')
         assert result.fork_session is True
 
-    def test_replacement_session_state_is_fresh(self) -> None:
+    def test_clear_does_not_build_unused_replacement_state(self) -> None:
         ctx = _make_slash_context()
         result = self.d.dispatch_slash_command(ctx, '/clear')
-        assert result.replacement_session_state is not None
-        assert result.replacement_session_state.messages == []
+        assert result.replacement_session_state is None
 
     def test_had_history_false_when_empty(self) -> None:
         ctx = _make_slash_context()

@@ -1,5 +1,5 @@
 from src.client.client_gateway import ClientGateway
-from src.client.openai_client import OpenAIClient
+from src.client.openai_client import OpenAIClient as _OpenAIClient
 from src.core_contracts.model_config import ModelConfig
 
 
@@ -15,7 +15,7 @@ def create_gateway(config: ModelConfig) -> ClientGateway:
     Raises:
         LlmInvalidRequestError: 当 config.api_key 为空时抛出。
     """
-    openai_client = OpenAIClient(config)
+    openai_client = _OpenAIClient(config)
     client_gateway = ClientGateway(openai_client)
     return client_gateway
 

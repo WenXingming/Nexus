@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from src.session.session_gateway import SessionGateway
-from src.session.session_state import SessionStateRuntime, generate_session_id
-from src.session.session_store import SessionStore
+from src.session.session_state import SessionStateRuntime as _SessionStateRuntime, generate_session_id
+from src.session.session_store import SessionStore as _SessionStore
 
 
 def create_gateway(session_store_directory: Path | None = None) -> SessionGateway:
@@ -15,8 +15,8 @@ def create_gateway(session_store_directory: Path | None = None) -> SessionGatewa
     Raises:
         None
     """
-    session_store = SessionStore(directory=session_store_directory)
-    session_state = SessionStateRuntime()
+    session_store = _SessionStore(directory=session_store_directory)
+    session_state = _SessionStateRuntime()
     return SessionGateway(session_store=session_store, session_state=session_state)
 
 

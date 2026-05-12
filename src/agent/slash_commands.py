@@ -18,7 +18,6 @@ from src.core_contracts.rag_contracts import (
     RagError,
     RagIndexRequest,
 )
-from src.core_contracts.session_contracts import SessionState
 from src.rag import RagGateway
 from src.session import SessionGateway
 
@@ -348,7 +347,6 @@ class SlashCommandRegistry:
             continue_query=False,
             command_name='clear',
             output='Cleared in-memory session context.',
-            replacement_session_state=SessionState(),
             fork_session=True,
             metadata={'had_history': had_history},
         )
@@ -381,7 +379,7 @@ class SlashCommandRegistry:
                 output='Session gateway not available.',
                 metadata={'error': 'session_gateway_missing'},
             )
-        new_state = self._session_gateway.create_state('新会话已创建')
+        new_state = self._session_gateway.create_empty_state()
         return SlashCommandResult(
             handled=True,
             continue_query=False,
@@ -605,10 +603,11 @@ class SlashCommandRegistry:
                 output='[Compact] No messages to compact.',
             )
 
-        result = self._context_gateway.compact_messages(
+        new_messages, result = self._context_gateway.compact_messages(
             messages,
             preserve_messages=context.context_policy.compact_preserve_messages,
         )
+        context.session_state.messages = new_messages
 
         if result.compacted:
             lines = [

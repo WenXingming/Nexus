@@ -82,6 +82,19 @@ class TestSessionGateway:
         session_state.build_new.assert_called_once_with("hello")
         assert result is state
 
+    def test_create_empty_state_delegates_to_runtime(self) -> None:
+        session_store = MagicMock()
+        session_store.directory = Path("C:/tmp/sessions")
+        state = SessionState(session_id="empty-session")
+        session_state = MagicMock()
+        session_state.build_empty.return_value = state
+        gateway = SessionGateway(session_store=session_store, session_state=session_state)
+
+        result = gateway.create_empty_state()
+
+        session_state.build_empty.assert_called_once_with()
+        assert result is state
+
     def test_resume_state_delegates_to_runtime(self) -> None:
         session_store = MagicMock()
         session_store.directory = Path("C:/tmp/sessions")
@@ -169,6 +182,15 @@ class TestSessionStateRuntime:
         with pytest.raises(ValueError, match="prompt"):
             runtime.build_new("   ")
 
+    def test_build_empty_creates_no_messages(self) -> None:
+        runtime = SessionStateRuntime()
+
+        state = runtime.build_empty()
+
+        assert state.session_id
+        assert state.messages == []
+        assert state.transcript_entries == []
+
     def test_build_from_persisted_copies_messages(self) -> None:
         runtime = SessionStateRuntime()
         persisted = (Message(role="user", content="hello"), Message(role="assistant", content="hi"))
@@ -197,7 +219,11 @@ class TestSessionStore:
         loaded = store.load("session-001")
 
         assert saved_path == tmp_path / "session-001.json"
-        assert loaded == snapshot
+        assert loaded.model_config.api_key == ""
+        assert loaded.model_config.model_name == snapshot.model_config.model_name
+        assert loaded.messages == snapshot.messages
+        assert loaded.transcript == snapshot.transcript
+        assert loaded.metadata == snapshot.metadata
 
     def test_load_missing_snapshot_raises(self, tmp_path: Path) -> None:
         store = SessionStore(directory=tmp_path)
@@ -252,4 +278,39 @@ class TestFactoriesAndSnapshot:
         restored = SessionSnapshot.from_dict(snapshot.to_dict())
 
         assert snapshot.turns == 2
-        assert restored == snapshot
+        assert restored.model_config.api_key == ""
+        assert restored.model_config.model_name == snapshot.model_config.model_name
+        assert restored.messages == snapshot.messages
+        assert restored.transcript == snapshot.transcript
+
+    def test_snapshot_does_not_serialize_api_key(self, model_config: ModelConfig) -> None:
+        snapshot = SessionSnapshot(
+            session_id="session-003",
+            model_config=model_config,
+            messages=(Message(role="user", content="hello"),),
+        )
+
+        payload = snapshot.to_dict()
+
+        assert "api_key" not in payload["model_config"]
+
+    def test_snapshot_roundtrip_preserves_tool_messages(self, model_config: ModelConfig) -> None:
+        tool_calls = [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "list_dir", "arguments": '{"path": "."}'},
+            }
+        ]
+        snapshot = SessionSnapshot(
+            session_id="session-004",
+            model_config=model_config,
+            messages=(
+                Message(role="assistant", content=None, tool_calls=tool_calls),
+                Message(role="tool", content="result", tool_call_id="call-1", name="list_dir"),
+            ),
+        )
+
+        restored = SessionSnapshot.from_dict(snapshot.to_dict())
+
+        assert restored.messages == snapshot.messages

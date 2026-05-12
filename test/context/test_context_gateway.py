@@ -103,14 +103,16 @@ def mock_estimator() -> MagicMock:
 @pytest.fixture
 def mock_snipper() -> MagicMock:
     snpr = MagicMock()
-    snpr.snip.return_value = SnipResult(snipped_count=0, tokens_removed=0)
+    # snip() now returns (new_messages, SnipResult)
+    snpr.snip.return_value = ([], SnipResult(snipped_count=0, tokens_removed=0))
     return snpr
 
 
 @pytest.fixture
 def mock_compactor() -> MagicMock:
     cmp = MagicMock()
-    cmp.compact.return_value = make_compact_result(compacted=False)
+    # compact() now returns (new_messages, CompactionResult)
+    cmp.compact.return_value = ([], make_compact_result(compacted=False))
     cmp.is_context_length_error.return_value = False
     return cmp
 
@@ -277,7 +279,7 @@ class TestRunPreModelCycleSnip:
     ) -> None:
         """is_soft_over=True 时 snipper.snip 被调用。"""
         mock_estimator.project_budget.return_value = make_snapshot(soft_over=True)
-        mock_snipper.snip.return_value = SnipResult(snipped_count=0, tokens_removed=0)
+        mock_snipper.snip.return_value = (list(run_state.session_messages), SnipResult(snipped_count=0, tokens_removed=0))
         gateway.run_pre_model_cycle(
             run_state=run_state,
             budget_config=budget_config,
@@ -302,7 +304,7 @@ class TestRunPreModelCycleSnip:
             make_snapshot(soft_over=True),  # 第一次投影
             make_snapshot(soft_over=False),  # snip 后重新投影
         ]
-        mock_snipper.snip.return_value = SnipResult(snipped_count=2, tokens_removed=300)
+        mock_snipper.snip.return_value = (list(run_state.session_messages), SnipResult(snipped_count=2, tokens_removed=300))
         result = gateway.run_pre_model_cycle(
             run_state=run_state,
             budget_config=budget_config,
@@ -325,7 +327,7 @@ class TestRunPreModelCycleSnip:
     ) -> None:
         """snipped_count=0 时不产出 snip_boundary 事件。"""
         mock_estimator.project_budget.return_value = make_snapshot(soft_over=True)
-        mock_snipper.snip.return_value = SnipResult(snipped_count=0, tokens_removed=0)
+        mock_snipper.snip.return_value = (list(run_state.session_messages), SnipResult(snipped_count=0, tokens_removed=0))
         result = gateway.run_pre_model_cycle(
             run_state=run_state,
             budget_config=budget_config,
@@ -380,7 +382,7 @@ class TestRunPreModelCycleAutoCompact:
     ) -> None:
         """projected 超过 auto_compact_threshold 时 compactor.compact 被调用。"""
         mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
-        mock_compactor.compact.return_value = make_compact_result(compacted=True)
+        mock_compactor.compact.return_value = (list(run_state.session_messages), make_compact_result(compacted=True))
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -402,7 +404,7 @@ class TestRunPreModelCycleAutoCompact:
     ) -> None:
         """auto-compact 成功时产出 compact_boundary 事件。"""
         mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
-        mock_compactor.compact.return_value = make_compact_result(compacted=True)
+        mock_compactor.compact.return_value = (list(run_state.session_messages), make_compact_result(compacted=True))
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         result = gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -426,7 +428,7 @@ class TestRunPreModelCycleAutoCompact:
         """auto-compact 失败时产出 compact_failed 事件。"""
         mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         failed = CompactionResult(compacted=False, error="no messages to compact")
-        mock_compactor.compact.return_value = failed
+        mock_compactor.compact.return_value = (list(run_state.session_messages), failed)
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         result = gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -450,7 +452,7 @@ class TestRunPreModelCycleAutoCompact:
         """auto-compact 成功后 run_state.model_call_count += 1 且 usage_delta 增加。"""
         mock_estimator.project_budget.return_value = make_snapshot(projected=9000)
         compact_res = make_compact_result(compacted=True)
-        mock_compactor.compact.return_value = compact_res
+        mock_compactor.compact.return_value = (list(run_state.session_messages), compact_res)
         policy = ContextPolicy(compact_preserve_messages=4, auto_compact_threshold_tokens=8000)
         gateway.run_pre_model_cycle(
             run_state=run_state,
@@ -502,7 +504,7 @@ class TestRunReactiveCompactCycle:
     ) -> None:
         """context 错误且 compact 成功时，返回 retry_model_call=True。"""
         mock_compactor.is_context_length_error.return_value = True
-        mock_compactor.compact.return_value = make_compact_result(compacted=True)
+        mock_compactor.compact.return_value = (list(run_state.session_messages), make_compact_result(compacted=True))
         mock_estimator.project_budget.return_value = make_snapshot()
 
         result = gateway.run_reactive_compact_cycle(
@@ -581,7 +583,7 @@ class TestRunReactiveCompactCycle:
     ) -> None:
         """compact 失败时返回不可重试并产出失败事件。"""
         mock_compactor.is_context_length_error.return_value = True
-        mock_compactor.compact.return_value = CompactionResult(compacted=False, error="no progress")
+        mock_compactor.compact.return_value = (list(run_state.session_messages), CompactionResult(compacted=False, error="no progress"))
 
         result = gateway.run_reactive_compact_cycle(
             run_state=run_state,
@@ -608,7 +610,7 @@ class TestRunReactiveCompactCycle:
     ) -> None:
         """compact 后 guard 拒绝继续时返回 stop_reason。"""
         mock_compactor.is_context_length_error.return_value = True
-        mock_compactor.compact.return_value = make_compact_result(compacted=True)
+        mock_compactor.compact.return_value = (list(run_state.session_messages), make_compact_result(compacted=True))
         mock_estimator.project_budget.return_value = make_snapshot()
         guard = MagicMock()
         guard.check_pre_model.return_value = "hard_budget_exceeded"

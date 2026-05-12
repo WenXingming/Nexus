@@ -9,10 +9,13 @@ Session 模块跨边界契约定义。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal, cast
 
 from src.core_contracts.model_config import ModelConfig
 from src.core_contracts.model_contracts import Message, TokenUsage
 from src.core_contracts.tools_contracts import JsonDict
+
+MessageRole = Literal["system", "user", "assistant", "tool"]
 
 
 @dataclass(frozen=True)
@@ -97,7 +100,6 @@ class SessionSnapshot:
             None
         """
         return {
-            "api_key": model_config.api_key,
             "base_url": model_config.base_url,
             "model_name": model_config.model_name,
             "temperature": model_config.temperature,
@@ -115,7 +117,14 @@ class SessionSnapshot:
         Raises:
             None
         """
-        return {"role": message.role, "content": message.content}
+        payload = {"role": message.role, "content": message.content}
+        if message.tool_calls is not None:
+            payload["tool_calls"] = message.tool_calls
+        if message.tool_call_id is not None:
+            payload["tool_call_id"] = message.tool_call_id
+        if message.name is not None:
+            payload["name"] = message.name
+        return payload
 
     @staticmethod
     def _serialize_usage(usage: TokenUsage) -> JsonDict:
@@ -189,7 +198,7 @@ class SessionSnapshot:
         """
         if not isinstance(payload, dict):
             raise ValueError("model_config 必须为字典。")
-        api_key = cls._require_non_empty_str(payload.get("api_key"), "model_config.api_key")
+        api_key = cls._read_optional_str(payload.get("api_key"), "model_config.api_key")
         base_url = cls._read_optional_str(payload.get("base_url"), "model_config.base_url") or None
         model_name = cls._require_non_empty_str(payload.get("model_name"), "model_config.model_name")
         temperature = cls._read_float(payload.get("temperature"), "model_config.temperature")
@@ -220,12 +229,60 @@ class SessionSnapshot:
         for index, item in enumerate(payload):
             if not isinstance(item, dict):
                 raise ValueError(f"{field_name}[{index}] 必须为字典。")
-            role = cls._require_non_empty_str(item.get("role"), f"{field_name}[{index}].role")
-            content = cls._require_non_empty_str(item.get("content"), f"{field_name}[{index}].content")
-            if role not in {"system", "user", "assistant"}:
-                raise ValueError(f"{field_name}[{index}].role 非法: {role}")
-            result.append(Message(role=role, content=content))
+            role = cls._read_message_role(item.get("role"), f"{field_name}[{index}].role")
+            tool_calls = cls._read_optional_tool_calls(item.get("tool_calls"), f"{field_name}[{index}].tool_calls")
+            tool_call_id = cls._read_optional_str(item.get("tool_call_id"), f"{field_name}[{index}].tool_call_id") or None
+            name = cls._read_optional_str(item.get("name"), f"{field_name}[{index}].name") or None
+            content = cls._read_message_content(
+                item.get("content"),
+                role=role,
+                has_tool_calls=tool_calls is not None,
+                field_name=f"{field_name}[{index}].content",
+            )
+            result.append(
+                Message(
+                    role=role,
+                    content=content,
+                    tool_calls=tool_calls,
+                    tool_call_id=tool_call_id,
+                    name=name,
+                )
+            )
         return result
+
+    @classmethod
+    def _read_message_role(cls, value: object, field_name: str) -> MessageRole:
+        role = cls._require_non_empty_str(value, field_name)
+        if role not in {"system", "user", "assistant", "tool"}:
+            raise ValueError(f"{field_name} 非法: {role}")
+        return cast(MessageRole, role)
+
+    @classmethod
+    def _read_optional_tool_calls(cls, value: object, field_name: str) -> list[dict] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError(f"{field_name} 必须为列表或 None。")
+        cls._validate_json_value(value, field_name)
+        result: list[dict] = []
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ValueError(f"{field_name}[{index}] 必须为字典。")
+            result.append(dict(item))
+        return result
+
+    @classmethod
+    def _read_message_content(
+        cls,
+        value: object,
+        *,
+        role: str,
+        has_tool_calls: bool,
+        field_name: str,
+    ) -> str | None:
+        if role == "assistant" and has_tool_calls and value is None:
+            return None
+        return cls._require_non_empty_str(value, field_name)
 
     @classmethod
     def _deserialize_usage(cls, payload: object) -> TokenUsage:

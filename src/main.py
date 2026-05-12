@@ -30,7 +30,7 @@ from src.core_contracts.model_config import ModelConfig, RagModelConfig
 from src.core_contracts.session_contracts import SessionState
 from src.core_contracts.tools_contracts import McpToolConfig
 from src.core_contracts.workspace_config import WorkspaceConfig
-from src.rag import RagGateway, build_rag_gateway
+from src.rag import RagGateway, create_rag_gateway
 from src.session import SessionGateway, create_gateway as create_session_gateway
 from src.tools import ToolsGateway, create_gateway as create_tools_gateway
 
@@ -124,7 +124,7 @@ class Application:
             async_mode=True,
         )
         rag_config = RagModelConfig.from_env()
-        self._rag_gateway = build_rag_gateway(
+        self._rag_gateway = create_rag_gateway(
             model_config=self._config,
             rag_config=rag_config,
         )
@@ -152,6 +152,7 @@ class Application:
             budget_config=self._budget_config,
             context_policy=self._context_policy,
             budget_guard=self._budget_guard,
+            workspace_root=self._workspace_config.root,
         )
         self._conversation_orchestrator = create_conversation_orchestrator(
             interaction_gateway=self._interaction_gateway,
@@ -173,7 +174,7 @@ class Application:
         self._interaction_gateway.render_startup()
 
         print(f"工作目录: {self._workspace_config.root}")
-        state = self._session_gateway.create_state("新会话已创建")
+        state = self._session_gateway.create_empty_state()
         self._interaction_gateway.start_session_tracker(state.session_id)
         return state
 

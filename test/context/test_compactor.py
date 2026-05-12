@@ -63,7 +63,7 @@ class TestCompactSuccess:
         """正常流程下 compact 返回 compacted=True 且 summary_text 不为空。"""
         mock_client.chat.return_value = make_ok_response("Here is the summary.")
         msgs = make_messages(8)
-        result = compactor.compact(msgs, preserve_messages=2)
+        new_msgs, result = compactor.compact(msgs, preserve_messages=2)
         assert result.compacted is True
         assert result.summary_text == "Here is the summary."
 
@@ -72,23 +72,23 @@ class TestCompactSuccess:
         mock_client.chat.return_value = make_ok_response()
         msgs = make_messages(10)
         original_len = len(msgs)
-        compactor.compact(msgs, preserve_messages=2)
-        assert len(msgs) < original_len
+        new_msgs, _ = compactor.compact(msgs, preserve_messages=2)
+        assert len(new_msgs) < original_len
 
     def test_compact_inserts_system_summary_message(self, compactor: Compactor, mock_client: MagicMock) -> None:
         """compact 后 messages[1]（prefix 之后）是 system 角色的摘要消息。"""
         mock_client.chat.return_value = make_ok_response("Summarized.")
         msgs = make_messages(8)
-        compactor.compact(msgs, preserve_messages=2)
+        new_msgs, _ = compactor.compact(msgs, preserve_messages=2)
         # msgs[0] 是原始 system，msgs[1] 应该是插入的摘要 system 消息
-        assert msgs[1].role == "system"
-        assert "Summarized." in (msgs[1].content or "")
+        assert new_msgs[1].role == "system"
+        assert "Summarized." in (new_msgs[1].content or "")
 
     def test_compact_usage_propagated(self, compactor: Compactor, mock_client: MagicMock) -> None:
         """compact 结果中携带模型调用消耗的 usage。"""
         mock_client.chat.return_value = make_ok_response()
         msgs = make_messages(8)
-        result = compactor.compact(msgs)
+        _, result = compactor.compact(msgs)
         assert result.usage.prompt_tokens == 100
         assert result.usage.completion_tokens == 50
 
@@ -96,14 +96,14 @@ class TestCompactSuccess:
         """compact 后 tokens_removed 应为正数（多条消息被单条摘要替代）。"""
         mock_client.chat.return_value = make_ok_response("s")
         msgs = make_messages(10)
-        result = compactor.compact(msgs, preserve_messages=1)
+        _, result = compactor.compact(msgs, preserve_messages=1)
         assert result.tokens_removed >= 0  # 可能为 0 若摘要刚好一样大
 
     def test_messages_replaced_count(self, compactor: Compactor, mock_client: MagicMock) -> None:
         """messages_replaced 等于被删除的原始消息条数。"""
         mock_client.chat.return_value = make_ok_response()
         msgs = make_messages(6)  # 1 system + 5 others
-        result = compactor.compact(msgs, preserve_messages=2)
+        _, result = compactor.compact(msgs, preserve_messages=2)
         # prefix=1, tail=2, replaced=6-1-2=3
         assert result.messages_replaced == 3
 
@@ -117,14 +117,14 @@ class TestCompactNotEnough:
     def test_not_enough_messages(self, compactor: Compactor, mock_client: MagicMock) -> None:
         """消息数量不足时返回 compacted=False 且不调用模型。"""
         msgs = [Message(role="system", content="sys")]
-        result = compactor.compact(msgs, preserve_messages=4)
+        _, result = compactor.compact(msgs, preserve_messages=4)
         assert result.compacted is False
         mock_client.chat.assert_not_called()
 
     def test_preserve_exceeds_available(self, compactor: Compactor, mock_client: MagicMock) -> None:
         """preserve 数量超过可用消息时返回 compacted=False。"""
         msgs = make_messages(3)
-        result = compactor.compact(msgs, preserve_messages=10)
+        _, result = compactor.compact(msgs, preserve_messages=10)
         assert result.compacted is False
         mock_client.chat.assert_not_called()
 
@@ -139,7 +139,7 @@ class TestCompactModelFailures:
         """模型返回空字符串时返回 compacted=False。"""
         mock_client.chat.return_value = make_ok_response("")
         msgs = make_messages(8)
-        result = compactor.compact(msgs)
+        _, result = compactor.compact(msgs)
         assert result.compacted is False
         assert result.error is not None
 
@@ -147,7 +147,7 @@ class TestCompactModelFailures:
         """模型调用抛出异常时返回 compacted=False 且 error 字段包含异常信息。"""
         mock_client.chat.side_effect = RuntimeError("connection refused")
         msgs = make_messages(8)
-        result = compactor.compact(msgs)
+        _, result = compactor.compact(msgs)
         assert result.compacted is False
         assert "connection refused" in (result.error or "")
 
@@ -162,7 +162,7 @@ class TestCompactModelFailures:
         )
         mock_client.chat.return_value = bad_response
         msgs = make_messages(8)
-        result = compactor.compact(msgs)
+        _, result = compactor.compact(msgs)
         assert result.compacted is False
         assert result.error is not None
 

@@ -1,9 +1,11 @@
 """应用层 Agent 入口。"""
 
+from pathlib import Path
+
 from src.agent.agent_executor import AgentLoopExecutor
 from src.agent.agent_gateway import AgentGateway
 from src.agent.conversation_orchestrator import ConversationOrchestrator
-from src.agent.slash_commands import SlashCommandRegistry, build_default_slash_command_specs
+from src.agent.slash_commands import build_default_slash_command_specs
 from src.client import ClientGateway
 from src.context import ContextGateway
 from src.core_contracts.context_contracts import BudgetConfig, ContextPolicy, PreModelBudgetGuard
@@ -49,7 +51,7 @@ def create_gateway(
     budget_config: BudgetConfig,
     context_policy: ContextPolicy,
     budget_guard: PreModelBudgetGuard,
-    rag_gateway: RagGateway | None = None,
+    workspace_root: Path | None = None,
 ) -> AgentGateway:
     """创建 AgentGateway 的工厂函数。
 
@@ -62,18 +64,10 @@ def create_gateway(
         budget_config: Token 预算配置
         context_policy: 上下文治理策略
         budget_guard: 预算守卫
-        rag_gateway: RAG 网关，用于 slash 命令
+        workspace_root: 工具执行限制的工作区根目录
     Returns:
         AgentGateway: 创建的网关实例
     """
-    slash_command_specs = SlashCommandRegistry(
-        context_gateway=context_gateway,
-        session_gateway=session_gateway,
-        rag_gateway=rag_gateway,
-        client_gateway=client,
-        tools_gateway=tools_gateway,
-    ).get_specs()
-
     executor = AgentLoopExecutor(
         client=client,
         context_gateway=context_gateway,
@@ -83,22 +77,14 @@ def create_gateway(
         budget_config=budget_config,
         context_policy=context_policy,
         budget_guard=budget_guard,
+        workspace_root=workspace_root or Path.cwd(),
     )
 
-    return AgentGateway(
-        client=client,
-        context_gateway=context_gateway,
-        session_gateway=session_gateway,
-        tools_gateway=tools_gateway,
-        interaction_gateway=interaction_gateway,
-        budget_config=budget_config,
-        context_policy=context_policy,
-        budget_guard=budget_guard,
-        executor=executor,
-    )
+    return AgentGateway(executor=executor)
 
 
 __all__ = [
+    'AgentGateway',
     'ConversationOrchestrator',
     'build_default_slash_command_specs',
     'create_conversation_orchestrator',
