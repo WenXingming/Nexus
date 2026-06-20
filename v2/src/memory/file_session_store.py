@@ -22,6 +22,14 @@ class FileSessionStore:
         (self._root / f"{session_id}.json").write_text("[]", encoding="utf-8")
         return session_id
 
+    def load(self, session_id: str) -> list[Message]:
+        raw = (self._root / f"{session_id}.json").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        return [
+            Message(role=item["role"], content=item["content"])
+            for item in data
+        ]
+
     def save(self, session_id: str, messages: list[Message]) -> None:
         data = [
             {"role": message.role, "content": message.content}

@@ -93,3 +93,42 @@ def test_save_preserves_non_ascii_content(local_tmp_path) -> None:
     assert json.loads(raw) == [
         {"role": "user", "content": "你好"},
     ]
+
+
+def test_load_returns_empty_list_for_new_session(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+
+    assert store.load(session_id) == []
+
+
+def test_load_returns_saved_messages(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    messages = [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="Echo: hi"),
+    ]
+
+    store.save(session_id, messages)
+
+    assert store.load(session_id) == messages
+
+
+def test_load_returns_copy(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    store.save(session_id, [Message(role="user", content="hi")])
+
+    loaded = store.load(session_id)
+    loaded.append(Message(role="assistant", content="changed"))
+
+    assert store.load(session_id) == [Message(role="user", content="hi")]
+
+
+def test_load_preserves_non_ascii_content(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    store.save(session_id, [Message(role="user", content="你好")])
+
+    assert store.load(session_id) == [Message(role="user", content="你好")]
