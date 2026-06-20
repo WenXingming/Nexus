@@ -11,3 +11,19 @@ class Message:
 
     role: str
     content: str
+
+
+@dataclass(frozen=True)
+class AgentRequest:
+    """Input for one agent run."""
+
+    input: str
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class AgentResult:
+    """Output from one agent run."""
+
+    output: str
+    session_id: str
