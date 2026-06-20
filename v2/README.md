@@ -15,3 +15,30 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 1. 做计划
 2. 拆分计划、小步实现
 3. 每一步都要测试验证
+
+## 当前能力
+
+- 最小 `AgentRuntime`
+- `FakeModel`
+- `InMemorySessionStore`
+- 单次 CLI 调用
+
+## 运行测试
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m pytest v2/test -v
+```
+
+## 运行 CLI
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli hi
+```
+
+输出：
+
+```text
+Echo: hi
+```
