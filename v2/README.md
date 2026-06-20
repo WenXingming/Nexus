@@ -82,14 +82,14 @@ python -m src.interfaces.cli hi
 $env:PYTHONPATH="v2"
 $env:NEXUS_MODEL_PROVIDER="openai"
 $env:OPENAI_API_KEY="..."
-$env:OPENAI_MODEL="gpt-4o-mini"
+$env:OPENAI_MODEL="qwen3.6-plus"
 python -m src.interfaces.cli hi
 ```
 
 如果使用自定义 OpenAI-compatible 服务，可以设置：
 
 ```powershell
-$env:OPENAI_BASE_URL="https://example.test/v1"
+$env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 ```
 
 当前 OpenAI-compatible provider 只支持普通非流式 chat completion，不支持 streaming 或 tool calls。

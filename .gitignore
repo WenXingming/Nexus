@@ -19,3 +19,5 @@ __pycache__/
 # other files
 backup/
 AI_News_2026-05-04.md
+
+.tmp/
