@@ -1,12 +1,12 @@
-"""Deterministic fake model for early runtime tests."""
+"""Deterministic fake model client for early runtime tests."""
 
 from __future__ import annotations
 
 from src.core.contracts import Message
 
 
-class FakeModel:
-    """A tiny model double that echoes the latest user message."""
+class FakeClient:
+    """A tiny model client double that echoes the latest user message."""
 
     def complete(self, messages: list[Message]) -> str:
         for message in reversed(messages):

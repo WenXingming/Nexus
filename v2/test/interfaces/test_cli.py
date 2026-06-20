@@ -1,7 +1,7 @@
 from src.core.contracts import Message
 from src.interfaces.cli import main, run_once, run_repl, run_repl_step
 from src.memory.in_memory_session_store import InMemorySessionStore
-from src.model.fake_model import FakeModel
+from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
 
 
@@ -11,7 +11,7 @@ def test_run_once_returns_agent_output() -> None:
 
 def test_run_repl_step_creates_session() -> None:
     runtime = AgentRuntime(
-        model=FakeModel(),
+        model=FakeClient(),
         session_store=InMemorySessionStore(),
     )
 
@@ -23,7 +23,7 @@ def test_run_repl_step_creates_session() -> None:
 
 def test_run_repl_step_reuses_session() -> None:
     store = InMemorySessionStore()
-    runtime = AgentRuntime(model=FakeModel(), session_store=store)
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
     session_id, _ = run_repl_step(runtime, session_id=None, text="first")
     next_session_id, output = run_repl_step(runtime, session_id=session_id, text="second")

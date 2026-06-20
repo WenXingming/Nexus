@@ -19,7 +19,7 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 ## 当前能力
 
 - 最小 `AgentRuntime`
-- `FakeModel`
+- `FakeClient`
 - `InMemorySessionStore`
 - 单次 CLI 调用
 - 最小 REPL
@@ -59,4 +59,31 @@ Echo: hi
 > /exit
 ```
 
-当前 REPL 使用 `FakeModel` 和 `InMemorySessionStore`。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
+当前 REPL 使用 `FakeClient` 和 `InMemorySessionStore`。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
+
+## 模型 Provider
+
+默认使用 `fake` provider：
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli hi
+```
+
+使用 OpenAI-compatible provider：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_MODEL_PROVIDER="openai"
+$env:OPENAI_API_KEY="..."
+$env:OPENAI_MODEL="gpt-4o-mini"
+python -m src.interfaces.cli hi
+```
+
+如果使用自定义 OpenAI-compatible 服务，可以设置：
+
+```powershell
+$env:OPENAI_BASE_URL="https://example.test/v1"
+```
+
+当前 OpenAI-compatible provider 只支持普通非流式 chat completion，不支持 streaming 或 tool calls。

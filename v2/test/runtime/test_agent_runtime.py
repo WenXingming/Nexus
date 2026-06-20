@@ -1,6 +1,6 @@
 from src.core.contracts import AgentRequest, Message
 from src.memory.in_memory_session_store import InMemorySessionStore
-from src.model.fake_model import FakeModel
+from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
 
 
@@ -45,7 +45,7 @@ def test_run_turns_input_into_user_message() -> None:
 
 
 def test_run_returns_model_output() -> None:
-    runtime = AgentRuntime(model=FakeModel(), session_store=RecordingSessionStore())
+    runtime = AgentRuntime(model=FakeClient(), session_store=RecordingSessionStore())
 
     result = runtime.run(AgentRequest(input="hi"))
 
@@ -53,7 +53,7 @@ def test_run_returns_model_output() -> None:
 
 
 def test_run_creates_session_id_when_missing() -> None:
-    runtime = AgentRuntime(model=FakeModel(), session_store=RecordingSessionStore())
+    runtime = AgentRuntime(model=FakeClient(), session_store=RecordingSessionStore())
 
     result = runtime.run(AgentRequest(input="hi"))
 
@@ -63,7 +63,7 @@ def test_run_creates_session_id_when_missing() -> None:
 def test_run_uses_request_session_id() -> None:
     store = RecordingSessionStore()
     store.messages_by_session_id["s1"] = []
-    runtime = AgentRuntime(model=FakeModel(), session_store=store)
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
     result = runtime.run(AgentRequest(input="hi", session_id="s1"))
 
@@ -91,7 +91,7 @@ def test_run_sends_history_plus_current_user_message_to_model() -> None:
 
 def test_run_saves_user_and_assistant_messages() -> None:
     store = RecordingSessionStore()
-    runtime = AgentRuntime(model=FakeModel(), session_store=store)
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
     result = runtime.run(AgentRequest(input="hi"))
 
@@ -108,7 +108,7 @@ def test_run_saves_history_with_new_turn() -> None:
         Message(role="user", content="first"),
         Message(role="assistant", content="Echo: first"),
     ]
-    runtime = AgentRuntime(model=FakeModel(), session_store=store)
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
     runtime.run(AgentRequest(input="second", session_id="s1"))
 
@@ -122,7 +122,7 @@ def test_run_saves_history_with_new_turn() -> None:
 
 def test_run_with_in_memory_store_keeps_history_across_turns() -> None:
     store = InMemorySessionStore()
-    runtime = AgentRuntime(model=FakeModel(), session_store=store)
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
     first = runtime.run(AgentRequest(input="first"))
     runtime.run(AgentRequest(input="second", session_id=first.session_id))
