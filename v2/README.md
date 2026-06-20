@@ -24,6 +24,12 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 - 单次 CLI 调用
 - 最小 REPL
 
+## 安装依赖
+
+```powershell
+python -m pip install -r v2/requirements.txt
+```
+
 ## 运行测试
 
 ```powershell
