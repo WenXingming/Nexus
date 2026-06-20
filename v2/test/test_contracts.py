@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from src.contracts import AgentRequest, AgentResult, Message
+from src.core.contracts import AgentRequest, AgentResult, Message
 
 
 def test_message_can_be_created() -> None:
