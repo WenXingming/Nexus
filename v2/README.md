@@ -22,6 +22,7 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 - `FakeModel`
 - `InMemorySessionStore`
 - 单次 CLI 调用
+- 最小 REPL
 
 ## 运行测试
 
@@ -42,3 +43,20 @@ python -m src.interfaces.cli hi
 ```text
 Echo: hi
 ```
+
+## 运行 REPL
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli --repl
+```
+
+示例：
+
+```text
+> hi
+Echo: hi
+> /exit
+```
+
+当前 REPL 使用 `FakeModel` 和 `InMemorySessionStore`。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
