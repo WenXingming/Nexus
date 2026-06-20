@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+from src.core.contracts import Message
 
 
 class FileSessionStore:
@@ -18,3 +21,13 @@ class FileSessionStore:
         self._next_id += 1
         (self._root / f"{session_id}.json").write_text("[]", encoding="utf-8")
         return session_id
+
+    def save(self, session_id: str, messages: list[Message]) -> None:
+        data = [
+            {"role": message.role, "content": message.content}
+            for message in messages
+        ]
+        (self._root / f"{session_id}.json").write_text(
+            json.dumps(data, ensure_ascii=False),
+            encoding="utf-8",
+        )
