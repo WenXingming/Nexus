@@ -1,14 +1,30 @@
-"""
-    递归搜索、删除 Python 缓存文件和文件夹（__pycache__）的脚本。
-    使用方法：python clean_py_cache.py
-"""
+"""Remove Python cache files and __pycache__ directories in this repository."""
 
-import pathlib
+from __future__ import annotations
 
-# 删除所有 .pyc 文件（注意默认当前脚本目录是 scripts，所以需要向上一级目录查找 .pyc 文件）
-for pyc_file in pathlib.Path('.').parent.rglob('*.pyc'): 
-   pyc_file.unlink()
+import shutil
+import os
+import stat
+from pathlib import Path
 
-# 删除所有 __pycache__ 文件夹
-for cache_dir in pathlib.Path('.').parent.rglob('__pycache__'):
-   cache_dir.rmdir()
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def make_writable_and_retry(function, path, _exc_info) -> None:
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+    except PermissionError:
+        print(f"warning: unable to remove {path}")
+
+
+for cache_dir in ROOT.rglob("__pycache__"):
+    shutil.rmtree(cache_dir, onexc=make_writable_and_retry)
+
+for pyc_file in ROOT.rglob("*.pyc"):
+    try:
+        os.chmod(pyc_file, stat.S_IWRITE)
+        pyc_file.unlink()
+    except PermissionError:
+        print(f"warning: unable to remove {pyc_file}")
