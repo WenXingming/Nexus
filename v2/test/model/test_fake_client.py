@@ -29,3 +29,18 @@ def test_returns_empty_echo_without_user_message() -> None:
     result = client.complete([Message(role="assistant", content="hello")])
 
     assert result == "Echo:"
+
+
+def test_streams_single_user_message() -> None:
+    client = FakeClient()
+
+    chunks = list(client.stream([Message(role="user", content="hi")]))
+
+    assert chunks == ["Echo: ", "hi"]
+
+
+def test_stream_join_matches_complete() -> None:
+    client = FakeClient()
+    messages = [Message(role="user", content="hi")]
+
+    assert "".join(client.stream(messages)) == client.complete(messages)
