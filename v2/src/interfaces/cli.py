@@ -54,13 +54,17 @@ def run_repl(input_func, output_func, session_id: str | None = None) -> None:
         output_func(result.output)
 
 
+def print_cli_error(error: Exception, output_func) -> int:
+    output_func(str(error))
+    return 1
+
+
 def main(argv: list[str], input_func=input, output_func=print) -> int:
     if argv == ["--repl"]:
         try:
             run_repl(input_func=input_func, output_func=output_func)
         except SessionFileFormatError as error:
-            output_func(str(error))
-            return 1
+            return print_cli_error(error, output_func)
         return 0
     if len(argv) == 3 and argv[0] == "--repl" and argv[1] == "--session":
         try:
@@ -70,8 +74,7 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
                 session_id=argv[2],
             )
         except (SessionNotFoundError, SessionFileFormatError) as error:
-            output_func(str(error))
-            return 1
+            return print_cli_error(error, output_func)
         return 0
     if argv and argv[0] == "--repl":
         output_func("Usage: python -m src.interfaces.cli <message>")
@@ -90,8 +93,7 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
     try:
         output_func(run_once(text, session_id=session_id))
     except (SessionNotFoundError, SessionFileFormatError) as error:
-        output_func(str(error))
-        return 1
+        return print_cli_error(error, output_func)
     return 0
 
 
