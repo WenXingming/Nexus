@@ -31,12 +31,17 @@ class RecordingSessionStore:
 
 
 class RecordingModel:
-    def __init__(self) -> None:
+    def __init__(self, stream_chunks: list[str] | None = None) -> None:
         self.messages: list[Message] | None = None
+        self.stream_chunks = stream_chunks or ["ok"]
 
     def complete(self, messages: list[Message]) -> str:
         self.messages = list(messages)
         return "ok"
+
+    def stream(self, messages: list[Message]) -> list[str]:
+        self.messages = list(messages)
+        return list(self.stream_chunks)
 
 
 def test_run_turns_input_into_user_message() -> None:
@@ -182,4 +187,40 @@ def test_run_with_in_memory_store_keeps_history_across_turns() -> None:
         Message(role="assistant", content="Echo: first"),
         Message(role="user", content="second"),
         Message(role="assistant", content="Echo: second"),
+    ]
+
+
+def test_stream_returns_model_chunks() -> None:
+    runtime = AgentRuntime(model=FakeClient(), session_store=RecordingSessionStore())
+
+    chunks = list(runtime.stream(AgentRequest(input="hi")))
+
+    assert chunks == ["Echo: ", "hi"]
+
+
+def test_stream_saves_user_and_joined_assistant_messages() -> None:
+    store = RecordingSessionStore()
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+
+    list(runtime.stream(AgentRequest(input="hi")))
+
+    assert store.saved_messages == [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="Echo: hi"),
+    ]
+
+
+def test_stream_sends_system_prompt_to_model() -> None:
+    model = RecordingModel(stream_chunks=["ok"])
+    runtime = AgentRuntime(
+        model=model,
+        session_store=RecordingSessionStore(),
+        config=AgentConfig(system_prompt="You are Nexus."),
+    )
+
+    list(runtime.stream(AgentRequest(input="hi")))
+
+    assert model.messages == [
+        Message(role="system", content="You are Nexus."),
+        Message(role="user", content="hi"),
     ]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from src.core.contracts import AgentRequest, AgentResult, Message
 from src.memory.contracts import SessionStore
 from src.model.contracts import Model
@@ -36,6 +38,20 @@ class AgentRuntime:
             output=output,
             session_id=session_id,
         )
+
+    def stream(self, request: AgentRequest) -> Iterable[str]:
+        session_id = request.session_id or self._session_store.create()
+        messages = self._session_store.load(session_id)
+        messages.append(Message(role="user", content=request.input))
+        model_messages = self._build_model_messages(messages)
+
+        chunks = []
+        for chunk in self._model.stream(model_messages):
+            chunks.append(chunk)
+            yield chunk
+
+        messages.append(Message(role="assistant", content="".join(chunks)))
+        self._session_store.save(session_id, messages)
 
     def _build_model_messages(self, messages: list[Message]) -> list[Message]:
         if self._config.system_prompt is None:
