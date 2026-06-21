@@ -15,22 +15,26 @@ def test_run_repl_step_creates_session() -> None:
         session_store=InMemorySessionStore(),
     )
 
-    session_id, output = run_repl_step(runtime, session_id=None, text="hi")
+    result = run_repl_step(runtime, session_id=None, text="hi")
 
-    assert session_id == "s1"
-    assert output == "Echo: hi"
+    assert result.session_id == "s1"
+    assert result.output == "Echo: hi"
 
 
 def test_run_repl_step_reuses_session() -> None:
     store = InMemorySessionStore()
     runtime = AgentRuntime(model=FakeClient(), session_store=store)
 
-    session_id, _ = run_repl_step(runtime, session_id=None, text="first")
-    next_session_id, output = run_repl_step(runtime, session_id=session_id, text="second")
+    first_result = run_repl_step(runtime, session_id=None, text="first")
+    second_result = run_repl_step(
+        runtime,
+        session_id=first_result.session_id,
+        text="second",
+    )
 
-    assert next_session_id == session_id
-    assert output == "Echo: second"
-    assert store.load(session_id) == [
+    assert second_result.session_id == first_result.session_id
+    assert second_result.output == "Echo: second"
+    assert store.load(first_result.session_id) == [
         Message(role="user", content="first"),
         Message(role="assistant", content="Echo: first"),
         Message(role="user", content="second"),

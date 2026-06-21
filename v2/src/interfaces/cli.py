@@ -6,6 +6,7 @@ import sys
 
 from src.composition.runtime_factory import create_runtime
 from src.core.contracts import AgentRequest
+from src.interfaces.contracts import ReplStepResult
 from src.runtime.agent_runtime import AgentRuntime
 
 
@@ -19,9 +20,9 @@ def run_repl_step(
     runtime: AgentRuntime,
     session_id: str | None,
     text: str,
-) -> tuple[str, str]:
+) -> ReplStepResult:
     result = runtime.run(AgentRequest(input=text, session_id=session_id))
-    return result.session_id, result.output
+    return ReplStepResult(session_id=result.session_id, output=result.output)
 
 
 def run_repl(input_func, output_func) -> None:
@@ -33,8 +34,9 @@ def run_repl(input_func, output_func) -> None:
         if text == "/exit":
             return
 
-        session_id, output = run_repl_step(runtime, session_id, text)
-        output_func(output)
+        result = run_repl_step(runtime, session_id, text)
+        session_id = result.session_id
+        output_func(result.output)
 
 
 def main(argv: list[str], input_func=input, output_func=print) -> int:
