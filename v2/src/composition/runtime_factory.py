@@ -21,6 +21,7 @@ def create_runtime(
 ) -> AgentRuntime:
     model_config = model_config or ModelConfig.from_env()
     memory_config = memory_config or MemoryConfig.from_env()
+    agent_config = agent_config or AgentConfig.from_env()
 
     if model_config.provider == "fake":
         model = FakeClient()

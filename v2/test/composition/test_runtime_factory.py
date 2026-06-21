@@ -125,6 +125,41 @@ def test_create_runtime_accepts_agent_config(monkeypatch) -> None:
     ]
 
 
+def test_create_runtime_reads_agent_config_from_env(monkeypatch) -> None:
+    model = RecordingFakeModel()
+    monkeypatch.setattr("src.composition.runtime_factory.FakeClient", lambda: model)
+    monkeypatch.setenv("NEXUS_SYSTEM_PROMPT", "You are Nexus.")
+    runtime = create_runtime(
+        model_config=ModelConfig(provider="fake"),
+        memory_config=MemoryConfig(store="memory"),
+    )
+
+    runtime.run(AgentRequest(input="hi"))
+
+    assert model.messages == [
+        Message(role="system", content="You are Nexus."),
+        Message(role="user", content="hi"),
+    ]
+
+
+def test_create_runtime_prefers_explicit_agent_config(monkeypatch) -> None:
+    model = RecordingFakeModel()
+    monkeypatch.setattr("src.composition.runtime_factory.FakeClient", lambda: model)
+    monkeypatch.setenv("NEXUS_SYSTEM_PROMPT", "env prompt")
+    runtime = create_runtime(
+        model_config=ModelConfig(provider="fake"),
+        memory_config=MemoryConfig(store="memory"),
+        agent_config=AgentConfig(system_prompt="explicit prompt"),
+    )
+
+    runtime.run(AgentRequest(input="hi"))
+
+    assert model.messages == [
+        Message(role="system", content="explicit prompt"),
+        Message(role="user", content="hi"),
+    ]
+
+
 def test_create_runtime_rejects_unknown_memory_store() -> None:
     with pytest.raises(ValueError, match="Unsupported memory store: unknown"):
         create_runtime(memory_config=MemoryConfig(store="unknown"))
