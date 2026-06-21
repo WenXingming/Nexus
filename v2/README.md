@@ -65,7 +65,7 @@ Echo: hi
 > /exit
 ```
 
-当前 REPL 使用 `FakeClient` 和 `InMemorySessionStore`。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
+默认情况下，REPL 使用 `FakeClient` 和内存 session 存储。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
 
 ## 模型 Provider
 
@@ -93,3 +93,34 @@ $env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 ```
 
 当前 OpenAI-compatible provider 只支持普通非流式 chat completion，不支持 streaming 或 tool calls。
+
+## Session 存储
+
+默认使用内存存储：
+
+```powershell
+$env:NEXUS_MEMORY_STORE="memory"
+```
+
+历史只存在当前 Python 进程内。
+
+使用文件存储：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_MEMORY_STORE="file"
+$env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
+python -m src.interfaces.cli --repl
+```
+
+session 文件会保存为：
+
+```text
+.nexus-v2/sessions/s1.json
+```
+
+当前限制：
+
+- 只能在同一个进程内继续使用已有 session id。
+- 暂无 resume/load 命令。
+- 已有文件不会自动续号。
