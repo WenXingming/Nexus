@@ -7,6 +7,7 @@ import sys
 from src.composition.runtime_factory import create_runtime
 from src.core.contracts import AgentRequest
 from src.interfaces.contracts import ReplStepResult, SessionNotFoundError
+from src.memory.contracts import SessionFileFormatError
 from src.runtime.agent_runtime import AgentRuntime
 
 
@@ -55,7 +56,11 @@ def run_repl(input_func, output_func, session_id: str | None = None) -> None:
 
 def main(argv: list[str], input_func=input, output_func=print) -> int:
     if argv == ["--repl"]:
-        run_repl(input_func=input_func, output_func=output_func)
+        try:
+            run_repl(input_func=input_func, output_func=output_func)
+        except SessionFileFormatError as error:
+            output_func(str(error))
+            return 1
         return 0
     if len(argv) == 3 and argv[0] == "--repl" and argv[1] == "--session":
         try:
@@ -64,7 +69,7 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
                 output_func=output_func,
                 session_id=argv[2],
             )
-        except SessionNotFoundError as error:
+        except (SessionNotFoundError, SessionFileFormatError) as error:
             output_func(str(error))
             return 1
         return 0
@@ -84,7 +89,7 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
     text = " ".join(message_args)
     try:
         output_func(run_once(text, session_id=session_id))
-    except SessionNotFoundError as error:
+    except (SessionNotFoundError, SessionFileFormatError) as error:
         output_func(str(error))
         return 1
     return 0

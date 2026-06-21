@@ -14,6 +14,7 @@ from src.interfaces.cli import (
     run_repl_step,
 )
 from src.interfaces.contracts import SessionNotFoundError
+from src.memory.contracts import SessionFileFormatError
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
@@ -204,6 +205,18 @@ def test_main_prints_error_for_missing_session(capsys) -> None:
     assert capsys.readouterr().out == "Session not found: missing-session\n"
 
 
+def test_main_prints_error_for_invalid_session_file(monkeypatch, capsys) -> None:
+    def raise_invalid_session_file(text, session_id=None) -> str:
+        raise SessionFileFormatError("s1")
+
+    monkeypatch.setattr(cli, "run_once", raise_invalid_session_file)
+
+    exit_code = main(["--session", "s1", "hi"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Invalid session file: s1\n"
+
+
 def test_main_repl_accepts_existing_session(monkeypatch) -> None:
     store = InMemorySessionStore()
     session_id = store.create()
@@ -227,6 +240,22 @@ def test_main_repl_prints_error_for_missing_session(capsys) -> None:
 
     assert exit_code == 1
     assert capsys.readouterr().out == "Session not found: missing-session\n"
+
+
+def test_main_repl_prints_error_for_invalid_session_file(monkeypatch) -> None:
+    def raise_invalid_session_file(input_func, output_func, session_id=None) -> None:
+        raise SessionFileFormatError("s1")
+
+    monkeypatch.setattr(cli, "run_repl", raise_invalid_session_file)
+    outputs: list[str] = []
+
+    exit_code = main(
+        ["--repl", "--session", "s1"],
+        output_func=outputs.append,
+    )
+
+    assert exit_code == 1
+    assert outputs == ["Invalid session file: s1"]
 
 
 def test_main_repl_runs_until_exit() -> None:
