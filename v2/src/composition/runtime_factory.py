@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from src.memory.config import MemoryConfig
+from src.memory.file_session_store import FileSessionStore
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.config import ModelConfig
 from src.model.fake_client import FakeClient
@@ -30,10 +31,12 @@ def create_runtime(
     else:
         raise ValueError(f"Unsupported model provider: {model_config.provider}")
 
-    if memory_config.store != "memory":
+    if memory_config.store == "memory":
+        session_store = InMemorySessionStore()
+    elif memory_config.store == "file":
+        session_store = FileSessionStore(root=memory_config.root)
+    else:
         raise ValueError(f"Unsupported memory store: {memory_config.store}")
-
-    session_store = InMemorySessionStore()
 
     return AgentRuntime(
         model=model,

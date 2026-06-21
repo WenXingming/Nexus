@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 
 from src.composition.runtime_factory import create_runtime
@@ -68,6 +72,22 @@ def test_create_runtime_accepts_memory_config() -> None:
     result = runtime.run(AgentRequest(input="hi"))
 
     assert result.output == "Echo: hi"
+
+
+def test_create_runtime_accepts_file_memory_config() -> None:
+    root = Path("v2/test/.tmp/runtime_factory") / uuid4().hex
+    runtime = create_runtime(memory_config=MemoryConfig(store="file", root=root))
+
+    first = runtime.run(AgentRequest(input="first"))
+    runtime.run(AgentRequest(input="second", session_id=first.session_id))
+
+    raw = (root / "s1.json").read_text(encoding="utf-8")
+    assert json.loads(raw) == [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "Echo: first"},
+        {"role": "user", "content": "second"},
+        {"role": "assistant", "content": "Echo: second"},
+    ]
 
 
 def test_create_runtime_rejects_unknown_memory_store() -> None:
