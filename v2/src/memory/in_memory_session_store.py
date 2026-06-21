@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 from src.core.contracts import Message
+from src.memory.session_id import new_session_id
 
 
 class InMemorySessionStore:
     """Stores session messages in the current Python process."""
 
     def __init__(self) -> None:
-        self._next_id = 1
         self._messages_by_session_id: dict[str, list[Message]] = {}
 
     def create(self) -> str:
-        session_id = f"s{self._next_id}"
-        self._next_id += 1
+        session_id = new_session_id()
         self._messages_by_session_id[session_id] = []
         return session_id
 

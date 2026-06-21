@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -23,10 +23,18 @@ def test_init_creates_root_directory(local_tmp_path) -> None:
     assert root.is_dir()
 
 
-def test_create_returns_first_session_id(local_tmp_path) -> None:
+def test_create_returns_uuid_session_id(local_tmp_path) -> None:
     store = FileSessionStore(root=local_tmp_path)
 
-    assert store.create() == "s1"
+    session_id = store.create()
+
+    assert str(UUID(session_id)) == session_id
+
+
+def test_create_returns_unique_session_ids(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+
+    assert store.create() != store.create()
 
 
 def test_create_writes_empty_session_file(local_tmp_path) -> None:
@@ -35,13 +43,6 @@ def test_create_writes_empty_session_file(local_tmp_path) -> None:
     session_id = store.create()
 
     assert (local_tmp_path / f"{session_id}.json").read_text(encoding="utf-8") == "[]"
-
-
-def test_create_returns_incrementing_session_ids(local_tmp_path) -> None:
-    store = FileSessionStore(root=local_tmp_path)
-
-    assert store.create() == "s1"
-    assert store.create() == "s2"
 
 
 def test_create_writes_file_for_each_session(local_tmp_path) -> None:

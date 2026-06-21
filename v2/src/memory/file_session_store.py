@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from src.core.contracts import Message
+from src.memory.session_id import new_session_id
 
 
 class FileSessionStore:
@@ -13,12 +14,10 @@ class FileSessionStore:
 
     def __init__(self, root: Path) -> None:
         self._root = root
-        self._next_id = 1
         self._root.mkdir(parents=True, exist_ok=True)
 
     def create(self) -> str:
-        session_id = f"s{self._next_id}"
-        self._next_id += 1
+        session_id = new_session_id()
         (self._root / f"{session_id}.json").write_text("[]", encoding="utf-8")
         return session_id
 

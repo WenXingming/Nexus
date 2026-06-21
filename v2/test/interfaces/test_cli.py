@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from src.core.contracts import Message
 import src.interfaces.cli as cli
 from src.interfaces.cli import (
@@ -10,6 +12,10 @@ from src.interfaces.cli import (
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
+
+
+def assert_uuid_string(value: str) -> None:
+    assert str(UUID(value)) == value
 
 
 def test_run_once_returns_agent_output() -> None:
@@ -32,12 +38,12 @@ def test_parse_session_args_with_session() -> None:
 
 def test_run_once_accepts_session_id(monkeypatch) -> None:
     store = InMemorySessionStore()
-    store.create()
+    session_id = store.create()
     runtime = AgentRuntime(model=FakeClient(), session_store=store)
     monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
 
-    assert run_once("second", session_id="s1") == "Echo: second"
-    assert store.load("s1") == [
+    assert run_once("second", session_id=session_id) == "Echo: second"
+    assert store.load(session_id) == [
         Message(role="user", content="second"),
         Message(role="assistant", content="Echo: second"),
     ]
@@ -51,7 +57,7 @@ def test_run_repl_step_creates_session() -> None:
 
     result = run_repl_step(runtime, session_id=None, text="hi")
 
-    assert result.session_id == "s1"
+    assert_uuid_string(result.session_id)
     assert result.output == "Echo: hi"
 
 
@@ -85,7 +91,9 @@ def test_run_repl_outputs_until_exit() -> None:
         output_func=outputs.append,
     )
 
-    assert outputs == ["session: s1", "Echo: hi", "Echo: second"]
+    assert outputs[0].startswith("session: ")
+    assert_uuid_string(outputs[0].removeprefix("session: "))
+    assert outputs[1:] == ["Echo: hi", "Echo: second"]
 
 
 def test_main_prints_output_for_single_word(capsys) -> None:
@@ -140,4 +148,6 @@ def test_main_repl_runs_until_exit() -> None:
     )
 
     assert exit_code == 0
-    assert outputs == ["session: s1", "Echo: hi"]
+    assert outputs[0].startswith("session: ")
+    assert_uuid_string(outputs[0].removeprefix("session: "))
+    assert outputs[1:] == ["Echo: hi"]

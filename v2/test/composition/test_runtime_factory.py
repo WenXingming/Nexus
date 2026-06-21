@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -55,7 +55,7 @@ def test_create_runtime_returns_working_runtime() -> None:
     result = runtime.run(AgentRequest(input="hi"))
 
     assert result.output == "Echo: hi"
-    assert result.session_id == "s1"
+    assert str(UUID(result.session_id)) == result.session_id
 
 
 def test_create_runtime_accepts_fake_client_config() -> None:
@@ -81,7 +81,7 @@ def test_create_runtime_accepts_file_memory_config() -> None:
     first = runtime.run(AgentRequest(input="first"))
     runtime.run(AgentRequest(input="second", session_id=first.session_id))
 
-    raw = (root / "s1.json").read_text(encoding="utf-8")
+    raw = (root / f"{first.session_id}.json").read_text(encoding="utf-8")
     assert json.loads(raw) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "Echo: first"},

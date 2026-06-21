@@ -1,12 +1,21 @@
+from uuid import UUID
+
 from src.core.contracts import Message
 from src.memory.in_memory_session_store import InMemorySessionStore
 
 
-def test_create_returns_incrementing_session_ids() -> None:
+def test_create_returns_uuid_session_id() -> None:
     store = InMemorySessionStore()
 
-    assert store.create() == "s1"
-    assert store.create() == "s2"
+    session_id = store.create()
+
+    assert str(UUID(session_id)) == session_id
+
+
+def test_create_returns_unique_session_ids() -> None:
+    store = InMemorySessionStore()
+
+    assert store.create() != store.create()
 
 
 def test_new_session_starts_empty() -> None:
