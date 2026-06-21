@@ -10,9 +10,15 @@ from src.interfaces.contracts import ReplStepResult
 from src.runtime.agent_runtime import AgentRuntime
 
 
-def run_once(text: str) -> str:
+def parse_session_args(argv: list[str]) -> tuple[str | None, list[str]]:
+    if len(argv) >= 2 and argv[0] == "--session":
+        return argv[1], argv[2:]
+    return None, argv
+
+
+def run_once(text: str, session_id: str | None = None) -> str:
     runtime = create_runtime()
-    result = runtime.run(AgentRequest(input=text))
+    result = runtime.run(AgentRequest(input=text, session_id=session_id))
     return result.output
 
 
@@ -34,8 +40,11 @@ def run_repl(input_func, output_func) -> None:
         if text == "/exit":
             return
 
+        is_new_session = session_id is None
         result = run_repl_step(runtime, session_id, text)
         session_id = result.session_id
+        if is_new_session:
+            output_func(f"session: {session_id}")
         output_func(result.output)
 
 
@@ -48,8 +57,13 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
         output_func("Usage: python -m src.interfaces.cli <message>")
         return 1
 
-    text = " ".join(argv)
-    output_func(run_once(text))
+    session_id, message_args = parse_session_args(argv)
+    if not message_args:
+        output_func("Usage: python -m src.interfaces.cli <message>")
+        return 1
+
+    text = " ".join(message_args)
+    output_func(run_once(text, session_id=session_id))
     return 0
 
 
