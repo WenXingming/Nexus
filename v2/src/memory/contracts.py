@@ -18,3 +18,6 @@ class SessionStore(Protocol):
 
     def save(self, session_id: str, messages: list[Message]) -> None:
         ...
+
+    def exists(self, session_id: str) -> bool:
+        ...

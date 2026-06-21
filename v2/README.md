@@ -61,6 +61,7 @@ python -m src.interfaces.cli --repl
 
 ```text
 > hi
+session: afa463a8-5e7d-4689-88ac-367577246835
 Echo: hi
 > /exit
 ```
@@ -116,11 +117,12 @@ python -m src.interfaces.cli --repl
 session 文件会保存为：
 
 ```text
-.nexus-v2/sessions/s1.json
+.nexus-v2/sessions/afa463a8-5e7d-4689-88ac-367577246835.json
 ```
+
+session id 使用 UUID 自动生成。
 
 当前限制：
 
 - 只能在同一个进程内继续使用已有 session id。
 - 暂无 resume/load 命令。
-- 已有文件不会自动续号。

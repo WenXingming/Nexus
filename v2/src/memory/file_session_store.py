@@ -38,3 +38,6 @@ class FileSessionStore:
             json.dumps(data, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    def exists(self, session_id: str) -> bool:
+        return (self._root / f"{session_id}.json").is_file()

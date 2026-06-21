@@ -22,3 +22,6 @@ class InMemorySessionStore:
 
     def save(self, session_id: str, messages: list[Message]) -> None:
         self._messages_by_session_id[session_id] = list(messages)
+
+    def exists(self, session_id: str) -> bool:
+        return session_id in self._messages_by_session_id

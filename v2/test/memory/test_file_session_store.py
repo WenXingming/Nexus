@@ -127,6 +127,19 @@ def test_load_returns_copy(local_tmp_path) -> None:
     assert store.load(session_id) == [Message(role="user", content="hi")]
 
 
+def test_exists_returns_true_for_created_session(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+
+    assert store.exists(session_id) is True
+
+
+def test_exists_returns_false_for_missing_session(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+
+    assert store.exists("missing-session") is False
+
+
 def test_load_preserves_non_ascii_content(local_tmp_path) -> None:
     store = FileSessionStore(root=local_tmp_path)
     session_id = store.create()

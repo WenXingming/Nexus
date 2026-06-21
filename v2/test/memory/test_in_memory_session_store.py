@@ -55,3 +55,16 @@ def test_save_stores_copy() -> None:
     messages.append(Message(role="assistant", content="changed"))
 
     assert store.load(session_id) == [Message(role="user", content="hi")]
+
+
+def test_exists_returns_true_for_created_session() -> None:
+    store = InMemorySessionStore()
+    session_id = store.create()
+
+    assert store.exists(session_id) is True
+
+
+def test_exists_returns_false_for_missing_session() -> None:
+    store = InMemorySessionStore()
+
+    assert store.exists("missing-session") is False
