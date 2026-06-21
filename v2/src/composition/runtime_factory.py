@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.memory.config import MemoryConfig
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.config import ModelConfig
 from src.model.fake_client import FakeClient
@@ -12,9 +13,12 @@ from src.runtime.agent_runtime import AgentRuntime
 
 def create_runtime(
     model_config: ModelConfig | None = None,
+    memory_config: MemoryConfig | None = None,
     openai_cls=None,
 ) -> AgentRuntime:
     model_config = model_config or ModelConfig.from_env()
+    memory_config = memory_config or MemoryConfig.from_env()
+
     if model_config.provider == "fake":
         model = FakeClient()
     elif model_config.provider == "openai":
@@ -26,7 +30,12 @@ def create_runtime(
     else:
         raise ValueError(f"Unsupported model provider: {model_config.provider}")
 
+    if memory_config.store != "memory":
+        raise ValueError(f"Unsupported memory store: {memory_config.store}")
+
+    session_store = InMemorySessionStore()
+
     return AgentRuntime(
         model=model,
-        session_store=InMemorySessionStore(),
+        session_store=session_store,
     )

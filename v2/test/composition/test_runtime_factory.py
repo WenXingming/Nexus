@@ -2,6 +2,7 @@ import pytest
 
 from src.composition.runtime_factory import create_runtime
 from src.core.contracts import AgentRequest
+from src.memory.config import MemoryConfig
 from src.model.config import ModelConfig
 
 
@@ -59,6 +60,19 @@ def test_create_runtime_accepts_fake_client_config() -> None:
     result = runtime.run(AgentRequest(input="hi"))
 
     assert result.output == "Echo: hi"
+
+
+def test_create_runtime_accepts_memory_config() -> None:
+    runtime = create_runtime(memory_config=MemoryConfig(store="memory"))
+
+    result = runtime.run(AgentRequest(input="hi"))
+
+    assert result.output == "Echo: hi"
+
+
+def test_create_runtime_rejects_unknown_memory_store() -> None:
+    with pytest.raises(ValueError, match="Unsupported memory store: unknown"):
+        create_runtime(memory_config=MemoryConfig(store="unknown"))
 
 
 def test_create_runtime_rejects_unknown_model_provider() -> None:
