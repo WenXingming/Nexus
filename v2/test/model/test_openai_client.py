@@ -13,6 +13,10 @@ class FakeChoice:
         self.message = FakeMessage(content)
 
 
+class FakeChoiceWithoutMessage:
+    pass
+
+
 class FakeDelta:
     def __init__(self, content: str | None) -> None:
         self.content = content
@@ -23,9 +27,18 @@ class FakeStreamChoice:
         self.delta = FakeDelta(content)
 
 
+class FakeStreamChoiceWithoutDelta:
+    pass
+
+
 class FakeStreamChunk:
     def __init__(self, content: str | None) -> None:
         self.choices = [FakeStreamChoice(content)]
+
+
+class FakeMissingDeltaStreamChunk:
+    def __init__(self) -> None:
+        self.choices = [FakeStreamChoiceWithoutDelta()]
 
 
 class FakeEmptyChoicesStreamChunk:
@@ -38,16 +51,28 @@ class FakeResponse:
         self.choices = [FakeChoice(content)]
 
 
+class FakeEmptyChoicesResponse:
+    def __init__(self) -> None:
+        self.choices = []
+
+
+class FakeMissingMessageResponse:
+    def __init__(self) -> None:
+        self.choices = [FakeChoiceWithoutMessage()]
+
+
 class FakeCompletions:
     def __init__(
         self,
         content: str | None = "answer",
         stream_contents: list[str | None] | None = None,
         stream_chunks: list | None = None,
+        response=None,
     ) -> None:
         self.content = content
         self.stream_contents = stream_contents or []
         self.stream_chunks = stream_chunks
+        self.response = response
         self.calls: list[dict] = []
 
     def create(self, **kwargs):
@@ -59,6 +84,8 @@ class FakeCompletions:
                 FakeStreamChunk(content)
                 for content in self.stream_contents
             ]
+        if self.response is not None:
+            return self.response
         return FakeResponse(self.content)
 
 
@@ -117,6 +144,34 @@ def test_complete_returns_empty_string_when_response_content_is_none() -> None:
     assert result == ""
 
 
+def test_complete_rejects_response_without_choices() -> None:
+    client = OpenAIClient(
+        config=ModelConfig(provider="openai", model="test-model"),
+        client=FakeSdkClient(FakeCompletions(response=FakeEmptyChoicesResponse())),
+    )
+
+    try:
+        client.complete([Message(role="user", content="hi")])
+    except RuntimeError as error:
+        assert str(error) == "Model response choices is empty."
+    else:
+        raise AssertionError("Expected RuntimeError")
+
+
+def test_complete_rejects_response_without_message() -> None:
+    client = OpenAIClient(
+        config=ModelConfig(provider="openai", model="test-model"),
+        client=FakeSdkClient(FakeCompletions(response=FakeMissingMessageResponse())),
+    )
+
+    try:
+        client.complete([Message(role="user", content="hi")])
+    except RuntimeError as error:
+        assert str(error) == "Model response choice message is missing."
+    else:
+        raise AssertionError("Expected RuntimeError")
+
+
 def test_stream_sends_openai_compatible_stream_request() -> None:
     completions = FakeCompletions(stream_contents=["hello"])
     client = OpenAIClient(
@@ -169,6 +224,21 @@ def test_stream_skips_chunks_without_choices() -> None:
         client=FakeSdkClient(FakeCompletions(stream_chunks=[
             FakeStreamChunk("hel"),
             FakeEmptyChoicesStreamChunk(),
+            FakeStreamChunk("lo"),
+        ])),
+    )
+
+    chunks = list(client.stream([Message(role="user", content="hi")]))
+
+    assert chunks == ["hel", "lo"]
+
+
+def test_stream_skips_chunks_without_delta() -> None:
+    client = OpenAIClient(
+        config=ModelConfig(provider="openai", model="test-model"),
+        client=FakeSdkClient(FakeCompletions(stream_chunks=[
+            FakeStreamChunk("hel"),
+            FakeMissingDeltaStreamChunk(),
             FakeStreamChunk("lo"),
         ])),
     )
