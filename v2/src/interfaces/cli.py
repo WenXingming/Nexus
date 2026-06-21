@@ -33,7 +33,7 @@ def run_once_stream(text: str, session_id: str | None, output_func) -> str:
     final_session_id = session_id
     for chunk in runtime.stream(AgentRequest(input=text, session_id=session_id)):
         final_session_id = chunk.session_id
-        output_func(chunk.text)
+        write_stream_chunk(chunk.text, output_func)
     return final_session_id or ""
 
 
@@ -66,7 +66,7 @@ def run_repl(input_func, output_func, session_id: str | None = None) -> None:
                 output_func(f"session: {session_id}")
                 is_new_session = False
             if output_func is print:
-                print_stream_chunk(chunk.text)
+                write_stream_chunk(chunk.text, output_func)
             else:
                 chunks.append(chunk.text)
         if output_func is print:
@@ -80,8 +80,11 @@ def print_cli_error(error: Exception, output_func) -> int:
     return 1
 
 
-def print_stream_chunk(text: str) -> None:
-    print(text, end="", flush=True)
+def write_stream_chunk(text: str, output_func) -> None:
+    if output_func is print:
+        print(text, end="", flush=True)
+    else:
+        output_func(text)
 
 
 def main(argv: list[str], input_func=input, output_func=print) -> int:
@@ -92,12 +95,11 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
             return 1
 
         text = " ".join(message_args)
-        stream_output_func = print_stream_chunk if output_func is print else output_func
         try:
             run_once_stream(
                 text,
                 session_id=session_id,
-                output_func=stream_output_func,
+                output_func=output_func,
             )
         except (SessionNotFoundError, SessionFileFormatError) as error:
             return print_cli_error(error, output_func)

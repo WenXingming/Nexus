@@ -13,6 +13,7 @@ from src.interfaces.cli import (
     run_once_stream,
     run_repl,
     run_repl_step,
+    write_stream_chunk,
 )
 from src.interfaces.contracts import SessionNotFoundError
 from src.memory.contracts import SessionFileFormatError
@@ -126,6 +127,21 @@ def test_run_once_stream_rejects_missing_session(monkeypatch) -> None:
 
     with pytest.raises(SessionNotFoundError, match="Session not found: missing-session"):
         run_once_stream("hi", session_id="missing-session", output_func=lambda text: None)
+
+
+def test_write_stream_chunk_prints_without_newline(capsys) -> None:
+    write_stream_chunk("hel", print)
+    write_stream_chunk("lo", print)
+
+    assert capsys.readouterr().out == "hello"
+
+
+def test_write_stream_chunk_uses_custom_output_func() -> None:
+    outputs: list[str] = []
+
+    write_stream_chunk("hello", outputs.append)
+
+    assert outputs == ["hello"]
 
 
 def test_run_repl_step_creates_session() -> None:

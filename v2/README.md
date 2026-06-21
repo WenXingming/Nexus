@@ -24,7 +24,7 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 - `FileSessionStore`
 - 单次 CLI 调用
 - 单次 CLI 流式输出
-- 最小 REPL
+- 最小流式 REPL
 
 ## 安装依赖
 
@@ -98,6 +98,8 @@ Echo: hi
 ```
 
 默认情况下，REPL 使用 `FakeClient` 和文件 session 存储，历史消息会保存到本地 session 文件。
+
+REPL 会边接收模型输出边打印；每轮回复结束后自动换行。
 
 ## 模型 Provider
 
