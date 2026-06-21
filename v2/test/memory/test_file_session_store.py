@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from src.core.contracts import Message
+from src.memory.contracts import SessionFileFormatError
 from src.memory.file_session_store import FileSessionStore
 
 
@@ -116,12 +117,27 @@ def test_load_returns_saved_messages(local_tmp_path) -> None:
     assert store.load(session_id) == messages
 
 
+def test_load_rejects_invalid_json_session_file(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    (local_tmp_path / f"{session_id}.json").write_text("{", encoding="utf-8")
+
+    with pytest.raises(
+        SessionFileFormatError,
+        match=f"Invalid session file: {session_id}",
+    ):
+        store.load(session_id)
+
+
 def test_load_rejects_non_list_session_file(local_tmp_path) -> None:
     store = FileSessionStore(root=local_tmp_path)
     session_id = store.create()
     (local_tmp_path / f"{session_id}.json").write_text("{}", encoding="utf-8")
 
-    with pytest.raises(ValueError, match=f"Invalid session file: {session_id}"):
+    with pytest.raises(
+        SessionFileFormatError,
+        match=f"Invalid session file: {session_id}",
+    ):
         store.load(session_id)
 
 
@@ -133,7 +149,10 @@ def test_load_rejects_message_without_role_or_content(local_tmp_path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match=f"Invalid session file: {session_id}"):
+    with pytest.raises(
+        SessionFileFormatError,
+        match=f"Invalid session file: {session_id}",
+    ):
         store.load(session_id)
 
 

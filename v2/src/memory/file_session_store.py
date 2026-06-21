@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from src.core.contracts import Message
+from src.memory.contracts import SessionFileFormatError
 from src.memory.session_id import new_session_id
 
 
@@ -26,9 +27,9 @@ class FileSessionStore:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid session file: {session_id}") from exc
+            raise SessionFileFormatError(session_id) from exc
         if not isinstance(data, list):
-            raise ValueError(f"Invalid session file: {session_id}")
+            raise SessionFileFormatError(session_id)
 
         messages = []
         for item in data:
@@ -37,7 +38,7 @@ class FileSessionStore:
                 or not isinstance(item.get("role"), str)
                 or not isinstance(item.get("content"), str)
             ):
-                raise ValueError(f"Invalid session file: {session_id}")
+                raise SessionFileFormatError(session_id)
             messages.append(Message(role=item["role"], content=item["content"]))
         return messages
 
