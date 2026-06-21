@@ -5,9 +5,10 @@ from uuid import UUID, uuid4
 import pytest
 
 from src.composition.runtime_factory import create_runtime
-from src.core.contracts import AgentRequest
+from src.core.contracts import AgentRequest, Message
 from src.memory.config import MemoryConfig
 from src.model.config import ModelConfig
+from src.runtime.config import AgentConfig
 
 
 class FakeMessage:
@@ -47,6 +48,15 @@ class FakeOpenAI:
         self.completions = FakeCompletions()
         self.chat = FakeChat(self.completions)
         self.instances.append(self)
+
+
+class RecordingFakeModel:
+    def __init__(self) -> None:
+        self.messages: list[Message] | None = None
+
+    def complete(self, messages: list[Message]) -> str:
+        self.messages = list(messages)
+        return "ok"
 
 
 def test_create_runtime_returns_working_runtime(monkeypatch) -> None:
@@ -95,6 +105,23 @@ def test_create_runtime_accepts_file_memory_config() -> None:
         {"role": "assistant", "content": "Echo: first"},
         {"role": "user", "content": "second"},
         {"role": "assistant", "content": "Echo: second"},
+    ]
+
+
+def test_create_runtime_accepts_agent_config(monkeypatch) -> None:
+    model = RecordingFakeModel()
+    monkeypatch.setattr("src.composition.runtime_factory.FakeClient", lambda: model)
+    runtime = create_runtime(
+        model_config=ModelConfig(provider="fake"),
+        memory_config=MemoryConfig(store="memory"),
+        agent_config=AgentConfig(system_prompt="You are Nexus."),
+    )
+
+    runtime.run(AgentRequest(input="hi"))
+
+    assert model.messages == [
+        Message(role="system", content="You are Nexus."),
+        Message(role="user", content="hi"),
     ]
 
 
