@@ -1,8 +1,8 @@
-from src.interfaces.contracts import ReplStepResult
+from src.interfaces.contracts import SessionNotFoundError
 
 
-def test_repl_step_result_keeps_session_and_output() -> None:
-    result = ReplStepResult(session_id="s1", output="Echo: hi")
+def test_session_not_found_error_keeps_session_id() -> None:
+    error = SessionNotFoundError("s1")
 
-    assert result.session_id == "s1"
-    assert result.output == "Echo: hi"
+    assert error.session_id == "s1"
+    assert str(error) == "Session not found: s1"

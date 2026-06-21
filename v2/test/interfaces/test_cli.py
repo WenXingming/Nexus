@@ -12,7 +12,6 @@ from src.interfaces.cli import (
     run_once,
     run_once_stream,
     run_repl,
-    run_repl_step,
     write_stream_chunk,
 )
 from src.interfaces.contracts import SessionNotFoundError
@@ -144,39 +143,6 @@ def test_write_stream_chunk_uses_custom_output_func() -> None:
     assert outputs == ["hello"]
 
 
-def test_run_repl_step_creates_session() -> None:
-    runtime = AgentRuntime(
-        model=FakeClient(),
-        session_store=InMemorySessionStore(),
-    )
-
-    result = run_repl_step(runtime, session_id=None, text="hi")
-
-    assert_uuid_string(result.session_id)
-    assert result.output == "Echo: hi"
-
-
-def test_run_repl_step_reuses_session() -> None:
-    store = InMemorySessionStore()
-    runtime = AgentRuntime(model=FakeClient(), session_store=store)
-
-    first_result = run_repl_step(runtime, session_id=None, text="first")
-    second_result = run_repl_step(
-        runtime,
-        session_id=first_result.session_id,
-        text="second",
-    )
-
-    assert second_result.session_id == first_result.session_id
-    assert second_result.output == "Echo: second"
-    assert store.load(first_result.session_id) == [
-        Message(role="user", content="first"),
-        Message(role="assistant", content="Echo: first"),
-        Message(role="user", content="second"),
-        Message(role="assistant", content="Echo: second"),
-    ]
-
-
 def test_run_repl_outputs_until_exit(monkeypatch) -> None:
     store = InMemorySessionStore()
     runtime = AgentRuntime(model=StreamOnlyClient(), session_store=store)
@@ -189,9 +155,9 @@ def test_run_repl_outputs_until_exit(monkeypatch) -> None:
         output_func=outputs.append,
     )
 
-    assert outputs[0].startswith("session: ")
-    assert_uuid_string(outputs[0].removeprefix("session: "))
-    assert outputs[1:] == ["Echo: hi", "Echo: second"]
+    assert outputs[:2] == ["Echo: hi", "Echo: second"]
+    assert outputs[2].startswith("session: ")
+    assert_uuid_string(outputs[2].removeprefix("session: "))
 
 
 def test_run_repl_reuses_existing_session(monkeypatch) -> None:
@@ -209,7 +175,7 @@ def test_run_repl_reuses_existing_session(monkeypatch) -> None:
         session_id=session_id,
     )
 
-    assert outputs == [f"session: {session_id}", "Echo: second"]
+    assert outputs == ["Echo: second", f"session: {session_id}"]
     assert store.load(session_id) == [
         Message(role="user", content="first"),
         Message(role="user", content="second"),
@@ -358,7 +324,7 @@ def test_main_repl_accepts_existing_session(monkeypatch) -> None:
     )
 
     assert exit_code == 0
-    assert outputs == [f"session: {session_id}", "Echo: hi"]
+    assert outputs == ["Echo: hi", f"session: {session_id}"]
 
 
 def test_main_repl_prints_error_for_missing_session(capsys) -> None:
@@ -395,9 +361,9 @@ def test_main_repl_runs_until_exit() -> None:
     )
 
     assert exit_code == 0
-    assert outputs[0].startswith("session: ")
-    assert_uuid_string(outputs[0].removeprefix("session: "))
-    assert outputs[1:] == ["Echo: hi"]
+    assert outputs[0] == "Echo: hi"
+    assert outputs[1].startswith("session: ")
+    assert_uuid_string(outputs[1].removeprefix("session: "))
 
 
 def test_main_repl_prints_stream_chunks_on_one_line(capsys) -> None:
@@ -410,6 +376,6 @@ def test_main_repl_prints_stream_chunks_on_one_line(capsys) -> None:
 
     assert exit_code == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].startswith("session: ")
-    assert_uuid_string(lines[0].removeprefix("session: "))
-    assert lines[1:] == ["Echo: hi"]
+    assert lines[0] == "Echo: hi"
+    assert lines[1].startswith("session: ")
+    assert_uuid_string(lines[1].removeprefix("session: "))

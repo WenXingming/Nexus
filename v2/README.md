@@ -92,9 +92,9 @@ python -m src.interfaces.cli --repl
 
 ```text
 > hi
-session: afa463a8-5e7d-4689-88ac-367577246835
 Echo: hi
 > /exit
+session: afa463a8-5e7d-4689-88ac-367577246835
 ```
 
 默认情况下，REPL 使用 `FakeClient` 和文件 session 存储，历史消息会保存到本地 session 文件。
@@ -206,7 +206,7 @@ $env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
 python -m src.interfaces.cli --repl --session afa463a8-5e7d-4689-88ac-367577246835
 ```
 
-如果 session 存在，REPL 会先输出 `session: <id>`，然后继续该 session 的历史。如果 session 不存在，会输出 `Session not found: <id>`。
+如果 session 存在，REPL 会继续该 session 的历史，并在退出时输出 `session: <id>`。如果 session 不存在，会输出 `Session not found: <id>`。
 
 当前限制：
 

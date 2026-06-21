@@ -6,9 +6,8 @@ import sys
 
 from src.composition.runtime_factory import create_runtime
 from src.core.contracts import AgentRequest
-from src.interfaces.contracts import ReplStepResult, SessionNotFoundError
+from src.interfaces.contracts import SessionNotFoundError
 from src.memory.contracts import SessionFileFormatError
-from src.runtime.agent_runtime import AgentRuntime
 
 
 def parse_session_args(argv: list[str]) -> tuple[str | None, list[str]]:
@@ -37,34 +36,22 @@ def run_once_stream(text: str, session_id: str | None, output_func) -> str:
     return final_session_id or ""
 
 
-def run_repl_step(
-    runtime: AgentRuntime,
-    session_id: str | None,
-    text: str,
-) -> ReplStepResult:
-    result = runtime.run(AgentRequest(input=text, session_id=session_id))
-    return ReplStepResult(session_id=result.session_id, output=result.output)
-
-
 def run_repl(input_func, output_func, session_id: str | None = None) -> None:
     runtime = create_runtime()
     if session_id is not None:
         if not runtime.has_session(session_id):
             raise SessionNotFoundError(session_id)
-        output_func(f"session: {session_id}")
 
     while True:
         text = input_func("> ")
         if text == "/exit":
+            if session_id is not None:
+                output_func(f"session: {session_id}")
             return
 
-        is_new_session = session_id is None
         chunks: list[str] = []
         for chunk in runtime.stream(AgentRequest(input=text, session_id=session_id)):
             session_id = chunk.session_id
-            if is_new_session:
-                output_func(f"session: {session_id}")
-                is_new_session = False
             if output_func is print:
                 write_stream_chunk(chunk.text, output_func)
             else:
