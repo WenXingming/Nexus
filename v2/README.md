@@ -109,6 +109,20 @@ $env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 当前 OpenAI-compatible provider 只支持普通非流式 chat completion，不支持 streaming 或 tool calls。
 
+## Agent 配置
+
+默认情况下，Agent 不设置 system prompt。
+
+可以通过环境变量设置：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_SYSTEM_PROMPT="You are Nexus."
+python -m src.interfaces.cli hi
+```
+
+`NEXUS_SYSTEM_PROMPT` 会作为 system message 发送给模型，但不会保存到 session 历史。
+
 ## Session 存储
 
 默认使用文件存储：
