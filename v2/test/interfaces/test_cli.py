@@ -1,5 +1,7 @@
 from uuid import UUID
 
+import pytest
+
 from src.core.contracts import Message
 import src.interfaces.cli as cli
 from src.interfaces.cli import (
@@ -9,6 +11,7 @@ from src.interfaces.cli import (
     run_repl,
     run_repl_step,
 )
+from src.interfaces.contracts import SessionNotFoundError
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
@@ -47,6 +50,17 @@ def test_run_once_accepts_session_id(monkeypatch) -> None:
         Message(role="user", content="second"),
         Message(role="assistant", content="Echo: second"),
     ]
+
+
+def test_run_once_rejects_missing_session(monkeypatch) -> None:
+    runtime = AgentRuntime(
+        model=FakeClient(),
+        session_store=InMemorySessionStore(),
+    )
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+
+    with pytest.raises(SessionNotFoundError, match="Session not found: missing-session"):
+        run_once("hi", session_id="missing-session")
 
 
 def test_run_repl_step_creates_session() -> None:
@@ -135,6 +149,13 @@ def test_main_prints_usage_without_message_after_session(capsys) -> None:
 
     assert exit_code == 1
     assert capsys.readouterr().out == "Usage: python -m src.interfaces.cli <message>\n"
+
+
+def test_main_prints_error_for_missing_session(capsys) -> None:
+    exit_code = main(["--session", "missing-session", "hi"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Session not found: missing-session\n"
 
 
 def test_main_repl_runs_until_exit() -> None:

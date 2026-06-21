@@ -14,6 +14,9 @@ class AgentRuntime:
         self._model = model
         self._session_store = session_store
 
+    def has_session(self, session_id: str) -> bool:
+        return self._session_store.exists(session_id)
+
     def run(self, request: AgentRequest) -> AgentResult:
         session_id = request.session_id or self._session_store.create()
         messages = self._session_store.load(session_id)

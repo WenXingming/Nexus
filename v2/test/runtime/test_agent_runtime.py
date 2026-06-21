@@ -25,6 +25,9 @@ class RecordingSessionStore:
         self.saved_messages = list(messages)
         self.messages_by_session_id[session_id] = list(messages)
 
+    def exists(self, session_id: str) -> bool:
+        return session_id in self.messages_by_session_id
+
 
 class RecordingModel:
     def __init__(self) -> None:
@@ -58,6 +61,20 @@ def test_run_creates_session_id_when_missing() -> None:
     result = runtime.run(AgentRequest(input="hi"))
 
     assert result.session_id == "s1"
+
+
+def test_has_session_returns_true_for_existing_session() -> None:
+    store = RecordingSessionStore()
+    store.messages_by_session_id["s1"] = []
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+
+    assert runtime.has_session("s1") is True
+
+
+def test_has_session_returns_false_for_missing_session() -> None:
+    runtime = AgentRuntime(model=FakeClient(), session_store=RecordingSessionStore())
+
+    assert runtime.has_session("missing-session") is False
 
 
 def test_run_uses_request_session_id() -> None:

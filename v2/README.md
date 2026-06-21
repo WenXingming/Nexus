@@ -50,6 +50,19 @@ python -m src.interfaces.cli hi
 Echo: hi
 ```
 
+指定已有 session：
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli --session afa463a8-5e7d-4689-88ac-367577246835 hi
+```
+
+如果 session 不存在，会输出：
+
+```text
+Session not found: afa463a8-5e7d-4689-88ac-367577246835
+```
+
 ## 运行 REPL
 
 ```powershell
@@ -122,7 +135,16 @@ session 文件会保存为：
 
 session id 使用 UUID 自动生成。
 
+使用文件存储时，可以通过 `--session <id>` 继续已有 session：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_MEMORY_STORE="file"
+$env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
+python -m src.interfaces.cli --session afa463a8-5e7d-4689-88ac-367577246835 hi
+```
+
 当前限制：
 
-- 只能在同一个进程内继续使用已有 session id。
-- 暂无 resume/load 命令。
+- 内存存储只能在同一个 Python 进程内继续使用已有 session id。
+- 暂无 session 列表命令。

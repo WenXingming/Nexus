@@ -6,7 +6,7 @@ import sys
 
 from src.composition.runtime_factory import create_runtime
 from src.core.contracts import AgentRequest
-from src.interfaces.contracts import ReplStepResult
+from src.interfaces.contracts import ReplStepResult, SessionNotFoundError
 from src.runtime.agent_runtime import AgentRuntime
 
 
@@ -18,6 +18,8 @@ def parse_session_args(argv: list[str]) -> tuple[str | None, list[str]]:
 
 def run_once(text: str, session_id: str | None = None) -> str:
     runtime = create_runtime()
+    if session_id is not None and not runtime.has_session(session_id):
+        raise SessionNotFoundError(session_id)
     result = runtime.run(AgentRequest(input=text, session_id=session_id))
     return result.output
 
@@ -63,7 +65,11 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
         return 1
 
     text = " ".join(message_args)
-    output_func(run_once(text, session_id=session_id))
+    try:
+        output_func(run_once(text, session_id=session_id))
+    except SessionNotFoundError as error:
+        output_func(str(error))
+        return 1
     return 0
 
 
