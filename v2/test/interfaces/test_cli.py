@@ -244,6 +244,13 @@ def test_main_stream_outputs_chunks(monkeypatch) -> None:
     assert outputs == ["a", "b"]
 
 
+def test_main_stream_prints_chunks_on_one_line(capsys) -> None:
+    exit_code = main(["--stream", "hi"])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "Echo: hi\n"
+
+
 def test_main_stream_passes_session_id(monkeypatch) -> None:
     calls: list[tuple[str, str | None]] = []
 

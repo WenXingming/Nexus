@@ -71,6 +71,10 @@ def print_cli_error(error: Exception, output_func) -> int:
     return 1
 
 
+def print_stream_chunk(text: str) -> None:
+    print(text, end="", flush=True)
+
+
 def main(argv: list[str], input_func=input, output_func=print) -> int:
     if argv and argv[0] == "--stream":
         session_id, message_args = parse_session_args(argv[1:])
@@ -79,10 +83,17 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
             return 1
 
         text = " ".join(message_args)
+        stream_output_func = print_stream_chunk if output_func is print else output_func
         try:
-            run_once_stream(text, session_id=session_id, output_func=output_func)
+            run_once_stream(
+                text,
+                session_id=session_id,
+                output_func=stream_output_func,
+            )
         except (SessionNotFoundError, SessionFileFormatError) as error:
             return print_cli_error(error, output_func)
+        if output_func is print:
+            print()
         return 0
 
     if argv == ["--repl"]:
