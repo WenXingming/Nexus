@@ -10,6 +10,7 @@ from src.interfaces.cli import (
     main,
     parse_session_args,
     run_once,
+    run_once_stream,
     run_repl,
     run_repl_step,
 )
@@ -70,6 +71,50 @@ def test_run_once_rejects_missing_session(monkeypatch) -> None:
 
     with pytest.raises(SessionNotFoundError, match="Session not found: missing-session"):
         run_once("hi", session_id="missing-session")
+
+
+def test_run_once_stream_outputs_chunks_and_returns_session_id(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+    outputs: list[str] = []
+
+    session_id = run_once_stream("hi", session_id=None, output_func=outputs.append)
+
+    assert_uuid_string(session_id)
+    assert outputs == ["Echo: ", "hi"]
+    assert store.load(session_id) == [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="Echo: hi"),
+    ]
+
+
+def test_run_once_stream_accepts_session_id(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    session_id = store.create()
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+    outputs: list[str] = []
+
+    result_session_id = run_once_stream(
+        "hi",
+        session_id=session_id,
+        output_func=outputs.append,
+    )
+
+    assert result_session_id == session_id
+    assert outputs == ["Echo: ", "hi"]
+
+
+def test_run_once_stream_rejects_missing_session(monkeypatch) -> None:
+    runtime = AgentRuntime(
+        model=FakeClient(),
+        session_store=InMemorySessionStore(),
+    )
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+
+    with pytest.raises(SessionNotFoundError, match="Session not found: missing-session"):
+        run_once_stream("hi", session_id="missing-session", output_func=lambda text: None)
 
 
 def test_run_repl_step_creates_session() -> None:
@@ -182,6 +227,50 @@ def test_main_passes_session_id(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     assert capsys.readouterr().out == "s1: hello\n"
+
+
+def test_main_stream_outputs_chunks(monkeypatch) -> None:
+    def stream(text, session_id=None, output_func=print) -> str:
+        output_func("a")
+        output_func("b")
+        return "s1"
+
+    monkeypatch.setattr(cli, "run_once_stream", stream)
+    outputs: list[str] = []
+
+    exit_code = main(["--stream", "hi"], output_func=outputs.append)
+
+    assert exit_code == 0
+    assert outputs == ["a", "b"]
+
+
+def test_main_stream_passes_session_id(monkeypatch) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    def stream(text, session_id=None, output_func=print) -> str:
+        calls.append((text, session_id))
+        return session_id or "s1"
+
+    monkeypatch.setattr(cli, "run_once_stream", stream)
+
+    exit_code = main(["--stream", "--session", "s1", "hi"])
+
+    assert exit_code == 0
+    assert calls == [("hi", "s1")]
+
+
+def test_main_stream_prints_usage_without_message(capsys) -> None:
+    exit_code = main(["--stream"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Usage: python -m src.interfaces.cli <message>\n"
+
+
+def test_main_stream_prints_error_for_missing_session(capsys) -> None:
+    exit_code = main(["--stream", "--session", "missing-session", "hi"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Session not found: missing-session\n"
 
 
 def test_main_prints_usage_without_message(capsys) -> None:

@@ -25,6 +25,18 @@ def run_once(text: str, session_id: str | None = None) -> str:
     return result.output
 
 
+def run_once_stream(text: str, session_id: str | None, output_func) -> str:
+    runtime = create_runtime()
+    if session_id is not None and not runtime.has_session(session_id):
+        raise SessionNotFoundError(session_id)
+
+    final_session_id = session_id
+    for chunk in runtime.stream(AgentRequest(input=text, session_id=session_id)):
+        final_session_id = chunk.session_id
+        output_func(chunk.text)
+    return final_session_id or ""
+
+
 def run_repl_step(
     runtime: AgentRuntime,
     session_id: str | None,
@@ -60,6 +72,19 @@ def print_cli_error(error: Exception, output_func) -> int:
 
 
 def main(argv: list[str], input_func=input, output_func=print) -> int:
+    if argv and argv[0] == "--stream":
+        session_id, message_args = parse_session_args(argv[1:])
+        if not message_args:
+            output_func("Usage: python -m src.interfaces.cli <message>")
+            return 1
+
+        text = " ".join(message_args)
+        try:
+            run_once_stream(text, session_id=session_id, output_func=output_func)
+        except (SessionNotFoundError, SessionFileFormatError) as error:
+            return print_cli_error(error, output_func)
+        return 0
+
     if argv == ["--repl"]:
         try:
             run_repl(input_func=input_func, output_func=output_func)
