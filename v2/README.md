@@ -23,6 +23,7 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 - `InMemorySessionStore`
 - `FileSessionStore`
 - 单次 CLI 调用
+- 单次 CLI 流式输出
 - 最小 REPL
 
 ## 安装依赖
@@ -62,6 +63,22 @@ python -m src.interfaces.cli --session afa463a8-5e7d-4689-88ac-367577246835 hi
 
 ```text
 Session not found: afa463a8-5e7d-4689-88ac-367577246835
+```
+
+流式输出：
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli --stream hi
+```
+
+`--stream` 会边接收模型输出边打印。普通 CLI 调用会等模型完整返回后再一次性输出。
+
+流式输出也可以继续已有 session：
+
+```powershell
+$env:PYTHONPATH="v2"
+python -m src.interfaces.cli --stream --session afa463a8-5e7d-4689-88ac-367577246835 hi
 ```
 
 ## 运行 REPL
@@ -107,7 +124,7 @@ python -m src.interfaces.cli hi
 $env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 ```
 
-当前 OpenAI-compatible provider 只支持普通非流式 chat completion，不支持 streaming 或 tool calls。
+当前 OpenAI-compatible provider 支持普通 chat completion 和 streaming，暂不支持 tool calls。
 
 ## Agent 配置
 
