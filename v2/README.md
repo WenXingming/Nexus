@@ -101,6 +101,8 @@ session: afa463a8-5e7d-4689-88ac-367577246835
 
 REPL 会边接收模型输出边打印；每轮回复结束后自动换行。
 
+REPL 中的空行会被忽略，不会发送给模型，也不会写入 session 历史。
+
 ## 模型 Provider
 
 默认使用 `fake` provider：

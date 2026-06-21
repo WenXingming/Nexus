@@ -18,10 +18,7 @@ class OpenAIClient:
     def complete(self, messages: list[Message]) -> str:
         response = self._client.chat.completions.create(
             model=self._config.model,
-            messages=[
-                {"role": message.role, "content": message.content}
-                for message in messages
-            ],
+            messages=self._to_openai_messages(messages),
         )
         content = response.choices[0].message.content
         return content or ""
@@ -29,10 +26,7 @@ class OpenAIClient:
     def stream(self, messages: list[Message]) -> Iterable[str]:
         chunks = self._client.chat.completions.create(
             model=self._config.model,
-            messages=[
-                {"role": message.role, "content": message.content}
-                for message in messages
-            ],
+            messages=self._to_openai_messages(messages),
             stream=True,
         )
         for chunk in chunks:
@@ -42,3 +36,9 @@ class OpenAIClient:
             if not content:
                 continue
             yield content
+
+    def _to_openai_messages(self, messages: list[Message]) -> list[dict[str, str]]:
+        return [
+            {"role": message.role, "content": message.content}
+            for message in messages
+        ]
