@@ -21,6 +21,17 @@ from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
 
 
+class StreamOnlyClient:
+    def complete(self, messages: list[Message]) -> str:
+        raise AssertionError("complete should not be used")
+
+    def stream(self, messages: list[Message]):
+        for message in reversed(messages):
+            if message.role == "user":
+                return ["Echo: ", message.content]
+        return ["Echo:"]
+
+
 @pytest.fixture(autouse=True)
 def isolate_default_session_root(monkeypatch) -> None:
     root = Path("v2/test/.tmp/cli") / uuid4().hex
@@ -150,10 +161,13 @@ def test_run_repl_step_reuses_session() -> None:
     ]
 
 
-def test_run_repl_outputs_until_exit() -> None:
+def test_run_repl_outputs_until_exit(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    runtime = AgentRuntime(model=StreamOnlyClient(), session_store=store)
     inputs = iter(["hi", "second", "/exit"])
     outputs: list[str] = []
 
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
     run_repl(
         input_func=lambda prompt: next(inputs),
         output_func=outputs.append,
@@ -368,3 +382,18 @@ def test_main_repl_runs_until_exit() -> None:
     assert outputs[0].startswith("session: ")
     assert_uuid_string(outputs[0].removeprefix("session: "))
     assert outputs[1:] == ["Echo: hi"]
+
+
+def test_main_repl_prints_stream_chunks_on_one_line(capsys) -> None:
+    inputs = iter(["hi", "/exit"])
+
+    exit_code = main(
+        ["--repl"],
+        input_func=lambda prompt: next(inputs),
+    )
+
+    assert exit_code == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("session: ")
+    assert_uuid_string(lines[0].removeprefix("session: "))
+    assert lines[1:] == ["Echo: hi"]

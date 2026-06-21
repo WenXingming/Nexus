@@ -59,11 +59,20 @@ def run_repl(input_func, output_func, session_id: str | None = None) -> None:
             return
 
         is_new_session = session_id is None
-        result = run_repl_step(runtime, session_id, text)
-        session_id = result.session_id
-        if is_new_session:
-            output_func(f"session: {session_id}")
-        output_func(result.output)
+        chunks: list[str] = []
+        for chunk in runtime.stream(AgentRequest(input=text, session_id=session_id)):
+            session_id = chunk.session_id
+            if is_new_session:
+                output_func(f"session: {session_id}")
+                is_new_session = False
+            if output_func is print:
+                print_stream_chunk(chunk.text)
+            else:
+                chunks.append(chunk.text)
+        if output_func is print:
+            print()
+        else:
+            output_func("".join(chunks))
 
 
 def print_cli_error(error: Exception, output_func) -> int:
