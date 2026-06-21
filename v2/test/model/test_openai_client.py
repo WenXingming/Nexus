@@ -28,6 +28,11 @@ class FakeStreamChunk:
         self.choices = [FakeStreamChoice(content)]
 
 
+class FakeEmptyChoicesStreamChunk:
+    def __init__(self) -> None:
+        self.choices = []
+
+
 class FakeResponse:
     def __init__(self, content: str | None) -> None:
         self.choices = [FakeChoice(content)]
@@ -38,14 +43,18 @@ class FakeCompletions:
         self,
         content: str | None = "answer",
         stream_contents: list[str | None] | None = None,
+        stream_chunks: list | None = None,
     ) -> None:
         self.content = content
         self.stream_contents = stream_contents or []
+        self.stream_chunks = stream_chunks
         self.calls: list[dict] = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if kwargs.get("stream") is True:
+            if self.stream_chunks is not None:
+                return self.stream_chunks
             return [
                 FakeStreamChunk(content)
                 for content in self.stream_contents
@@ -147,6 +156,21 @@ def test_stream_skips_empty_chunks() -> None:
     client = OpenAIClient(
         config=ModelConfig(provider="openai", model="test-model"),
         client=FakeSdkClient(FakeCompletions(stream_contents=["hel", None, "", "lo"])),
+    )
+
+    chunks = list(client.stream([Message(role="user", content="hi")]))
+
+    assert chunks == ["hel", "lo"]
+
+
+def test_stream_skips_chunks_without_choices() -> None:
+    client = OpenAIClient(
+        config=ModelConfig(provider="openai", model="test-model"),
+        client=FakeSdkClient(FakeCompletions(stream_chunks=[
+            FakeStreamChunk("hel"),
+            FakeEmptyChoicesStreamChunk(),
+            FakeStreamChunk("lo"),
+        ])),
     )
 
     chunks = list(client.stream([Message(role="user", content="hi")]))

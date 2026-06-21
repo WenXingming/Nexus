@@ -36,6 +36,9 @@ class OpenAIClient:
             stream=True,
         )
         for chunk in chunks:
+            if not chunk.choices:
+                continue
             content = chunk.choices[0].delta.content
-            if content:
-                yield content
+            if not content:
+                continue
+            yield content
