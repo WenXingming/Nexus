@@ -51,6 +51,7 @@ class FakeOpenAI:
 
 def test_create_runtime_returns_working_runtime(monkeypatch) -> None:
     root = Path("v2/test/.tmp/runtime_factory/default") / uuid4().hex
+    monkeypatch.delenv("NEXUS_MEMORY_STORE", raising=False)
     monkeypatch.setenv("NEXUS_SESSION_ROOT", str(root))
     runtime = create_runtime()
 
@@ -58,6 +59,11 @@ def test_create_runtime_returns_working_runtime(monkeypatch) -> None:
 
     assert result.output == "Echo: hi"
     assert str(UUID(result.session_id)) == result.session_id
+    raw = (root / f"{result.session_id}.json").read_text(encoding="utf-8")
+    assert json.loads(raw) == [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "Echo: hi"},
+    ]
 
 
 def test_create_runtime_accepts_fake_client_config() -> None:

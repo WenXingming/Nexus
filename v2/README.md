@@ -119,6 +119,17 @@ $env:NEXUS_MEMORY_STORE="file"
 
 session 文件默认保存到 `.nexus-v2/sessions`。
 
+手动验证默认文件存储：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
+python -m src.interfaces.cli hi
+Get-ChildItem .nexus-v2/sessions
+```
+
+执行后，`.nexus-v2/sessions` 下会生成 `<session-id>.json`。
+
 显式指定文件存储路径：
 
 ```powershell
