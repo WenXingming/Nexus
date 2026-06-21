@@ -48,6 +48,8 @@ def run_repl(input_func, output_func, session_id: str | None = None) -> None:
             if session_id is not None:
                 output_func(f"session: {session_id}")
             return
+        if not text.strip():
+            continue
 
         chunks: list[str] = []
         for chunk in runtime.stream(AgentRequest(input=text, session_id=session_id)):

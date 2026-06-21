@@ -183,6 +183,27 @@ def test_run_repl_reuses_existing_session(monkeypatch) -> None:
     ]
 
 
+def test_run_repl_skips_blank_input(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    runtime = AgentRuntime(model=StreamOnlyClient(), session_store=store)
+    inputs = iter(["", "  ", "hi", "/exit"])
+    outputs: list[str] = []
+
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+    run_repl(
+        input_func=lambda prompt: next(inputs),
+        output_func=outputs.append,
+    )
+
+    assert outputs[0] == "Echo: hi"
+    session_id = outputs[1].removeprefix("session: ")
+    assert_uuid_string(session_id)
+    assert store.load(session_id) == [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="Echo: hi"),
+    ]
+
+
 def test_run_repl_rejects_missing_session(monkeypatch) -> None:
     runtime = AgentRuntime(
         model=FakeClient(),
