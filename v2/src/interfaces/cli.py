@@ -33,9 +33,12 @@ def run_repl_step(
     return ReplStepResult(session_id=result.session_id, output=result.output)
 
 
-def run_repl(input_func, output_func) -> None:
+def run_repl(input_func, output_func, session_id: str | None = None) -> None:
     runtime = create_runtime()
-    session_id: str | None = None
+    if session_id is not None:
+        if not runtime.has_session(session_id):
+            raise SessionNotFoundError(session_id)
+        output_func(f"session: {session_id}")
 
     while True:
         text = input_func("> ")
@@ -54,6 +57,20 @@ def main(argv: list[str], input_func=input, output_func=print) -> int:
     if argv == ["--repl"]:
         run_repl(input_func=input_func, output_func=output_func)
         return 0
+    if len(argv) == 3 and argv[0] == "--repl" and argv[1] == "--session":
+        try:
+            run_repl(
+                input_func=input_func,
+                output_func=output_func,
+                session_id=argv[2],
+            )
+        except SessionNotFoundError as error:
+            output_func(str(error))
+            return 1
+        return 0
+    if argv and argv[0] == "--repl":
+        output_func("Usage: python -m src.interfaces.cli <message>")
+        return 1
 
     if not argv:
         output_func("Usage: python -m src.interfaces.cli <message>")

@@ -110,6 +110,44 @@ def test_run_repl_outputs_until_exit() -> None:
     assert outputs[1:] == ["Echo: hi", "Echo: second"]
 
 
+def test_run_repl_reuses_existing_session(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    session_id = store.create()
+    store.save(session_id, [Message(role="user", content="first")])
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+    inputs = iter(["second", "/exit"])
+    outputs: list[str] = []
+
+    run_repl(
+        input_func=lambda prompt: next(inputs),
+        output_func=outputs.append,
+        session_id=session_id,
+    )
+
+    assert outputs == [f"session: {session_id}", "Echo: second"]
+    assert store.load(session_id) == [
+        Message(role="user", content="first"),
+        Message(role="user", content="second"),
+        Message(role="assistant", content="Echo: second"),
+    ]
+
+
+def test_run_repl_rejects_missing_session(monkeypatch) -> None:
+    runtime = AgentRuntime(
+        model=FakeClient(),
+        session_store=InMemorySessionStore(),
+    )
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+
+    with pytest.raises(SessionNotFoundError, match="Session not found: missing-session"):
+        run_repl(
+            input_func=lambda prompt: "/exit",
+            output_func=lambda text: None,
+            session_id="missing-session",
+        )
+
+
 def test_main_prints_output_for_single_word(capsys) -> None:
     exit_code = main(["hi"])
 
@@ -153,6 +191,31 @@ def test_main_prints_usage_without_message_after_session(capsys) -> None:
 
 def test_main_prints_error_for_missing_session(capsys) -> None:
     exit_code = main(["--session", "missing-session", "hi"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Session not found: missing-session\n"
+
+
+def test_main_repl_accepts_existing_session(monkeypatch) -> None:
+    store = InMemorySessionStore()
+    session_id = store.create()
+    runtime = AgentRuntime(model=FakeClient(), session_store=store)
+    monkeypatch.setattr(cli, "create_runtime", lambda: runtime)
+    inputs = iter(["hi", "/exit"])
+    outputs: list[str] = []
+
+    exit_code = main(
+        ["--repl", "--session", session_id],
+        input_func=lambda prompt: next(inputs),
+        output_func=outputs.append,
+    )
+
+    assert exit_code == 0
+    assert outputs == [f"session: {session_id}", "Echo: hi"]
+
+
+def test_main_repl_prints_error_for_missing_session(capsys) -> None:
+    exit_code = main(["--repl", "--session", "missing-session"])
 
     assert exit_code == 1
     assert capsys.readouterr().out == "Session not found: missing-session\n"
