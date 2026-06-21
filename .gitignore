@@ -15,6 +15,7 @@ __pycache__/
 
 # session files
 .nexus/
+.nexus-v2/
 
 # other files
 backup/

@@ -49,7 +49,9 @@ class FakeOpenAI:
         self.instances.append(self)
 
 
-def test_create_runtime_returns_working_runtime() -> None:
+def test_create_runtime_returns_working_runtime(monkeypatch) -> None:
+    root = Path("v2/test/.tmp/runtime_factory/default") / uuid4().hex
+    monkeypatch.setenv("NEXUS_SESSION_ROOT", str(root))
     runtime = create_runtime()
 
     result = runtime.run(AgentRequest(input="hi"))

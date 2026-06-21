@@ -21,6 +21,7 @@ Nexus v2 是一个从小处开始、逐步实现的通用 Agent Runtime。
 - 最小 `AgentRuntime`
 - `FakeClient`
 - `InMemorySessionStore`
+- `FileSessionStore`
 - 单次 CLI 调用
 - 最小 REPL
 
@@ -79,7 +80,7 @@ Echo: hi
 > /exit
 ```
 
-默认情况下，REPL 使用 `FakeClient` 和内存 session 存储。历史消息只保存在当前 Python 进程内，程序退出后不会持久化。
+默认情况下，REPL 使用 `FakeClient` 和文件 session 存储，历史消息会保存到本地 session 文件。
 
 ## 模型 Provider
 
@@ -110,15 +111,15 @@ $env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 ## Session 存储
 
-默认使用内存存储：
+默认使用文件存储：
 
 ```powershell
-$env:NEXUS_MEMORY_STORE="memory"
+$env:NEXUS_MEMORY_STORE="file"
 ```
 
-历史只存在当前 Python 进程内。
+session 文件默认保存到 `.nexus-v2/sessions`。
 
-使用文件存储：
+显式指定文件存储路径：
 
 ```powershell
 $env:PYTHONPATH="v2"
@@ -135,6 +136,14 @@ session 文件会保存为：
 
 session id 使用 UUID 自动生成。
 
+内存存储主要用于测试或临时会话：
+
+```powershell
+$env:NEXUS_MEMORY_STORE="memory"
+```
+
+使用内存存储时，历史只存在当前 Python 进程内。
+
 使用文件存储时，可以通过 `--session <id>` 继续已有 session：
 
 ```powershell
@@ -144,7 +153,17 @@ $env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
 python -m src.interfaces.cli --session afa463a8-5e7d-4689-88ac-367577246835 hi
 ```
 
+也可以从已有 session 启动 REPL：
+
+```powershell
+$env:PYTHONPATH="v2"
+$env:NEXUS_MEMORY_STORE="file"
+$env:NEXUS_SESSION_ROOT=".nexus-v2/sessions"
+python -m src.interfaces.cli --repl --session afa463a8-5e7d-4689-88ac-367577246835
+```
+
+如果 session 存在，REPL 会先输出 `session: <id>`，然后继续该 session 的历史。如果 session 不存在，会输出 `Session not found: <id>`。
+
 当前限制：
 
-- 内存存储只能在同一个 Python 进程内继续使用已有 session id。
 - 暂无 session 列表命令。

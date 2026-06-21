@@ -1,6 +1,8 @@
 from uuid import UUID
 
 import pytest
+from pathlib import Path
+from uuid import uuid4
 
 from src.core.contracts import Message
 import src.interfaces.cli as cli
@@ -15,6 +17,12 @@ from src.interfaces.contracts import SessionNotFoundError
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
+
+
+@pytest.fixture(autouse=True)
+def isolate_default_session_root(monkeypatch) -> None:
+    root = Path("v2/test/.tmp/cli") / uuid4().hex
+    monkeypatch.setenv("NEXUS_SESSION_ROOT", str(root))
 
 
 def assert_uuid_string(value: str) -> None:

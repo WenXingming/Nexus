@@ -3,13 +3,13 @@ from pathlib import Path
 from src.memory.config import MemoryConfig
 
 
-def test_memory_config_defaults_to_memory_store(monkeypatch) -> None:
+def test_memory_config_defaults_to_file_store(monkeypatch) -> None:
     monkeypatch.delenv("NEXUS_MEMORY_STORE", raising=False)
     monkeypatch.delenv("NEXUS_SESSION_ROOT", raising=False)
 
     config = MemoryConfig.from_env()
 
-    assert config.store == "memory"
+    assert config.store == "file"
     assert config.root == Path(".nexus-v2/sessions")
 
 

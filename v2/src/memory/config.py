@@ -11,12 +11,12 @@ from pathlib import Path
 class MemoryConfig:
     """Configuration for selecting the session store."""
 
-    store: str = "memory"
+    store: str = "file"
     root: Path = Path(".nexus-v2/sessions")
 
     @classmethod
     def from_env(cls) -> "MemoryConfig":
         return cls(
-            store=os.environ.get("NEXUS_MEMORY_STORE", "memory"),
+            store=os.environ.get("NEXUS_MEMORY_STORE", "file"),
             root=Path(os.environ.get("NEXUS_SESSION_ROOT", ".nexus-v2/sessions")),
         )
