@@ -195,7 +195,8 @@ def test_stream_returns_model_chunks() -> None:
 
     chunks = list(runtime.stream(AgentRequest(input="hi")))
 
-    assert chunks == ["Echo: ", "hi"]
+    assert [chunk.text for chunk in chunks] == ["Echo: ", "hi"]
+    assert [chunk.session_id for chunk in chunks] == ["s1", "s1"]
 
 
 def test_stream_saves_user_and_joined_assistant_messages() -> None:

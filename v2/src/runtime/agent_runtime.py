@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from src.core.contracts import AgentRequest, AgentResult, Message
+from src.core.contracts import AgentRequest, AgentResult, AgentStreamChunk, Message
 from src.memory.contracts import SessionStore
 from src.model.contracts import Model
 from src.runtime.config import AgentConfig
@@ -39,7 +39,7 @@ class AgentRuntime:
             session_id=session_id,
         )
 
-    def stream(self, request: AgentRequest) -> Iterable[str]:
+    def stream(self, request: AgentRequest) -> Iterable[AgentStreamChunk]:
         session_id = request.session_id or self._session_store.create()
         messages = self._session_store.load(session_id)
         messages.append(Message(role="user", content=request.input))
@@ -48,7 +48,7 @@ class AgentRuntime:
         chunks = []
         for chunk in self._model.stream(model_messages):
             chunks.append(chunk)
-            yield chunk
+            yield AgentStreamChunk(text=chunk, session_id=session_id)
 
         messages.append(Message(role="assistant", content="".join(chunks)))
         self._session_store.save(session_id, messages)

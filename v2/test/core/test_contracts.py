@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from src.core.contracts import AgentRequest, AgentResult, Message
+from src.core.contracts import AgentRequest, AgentResult, AgentStreamChunk, Message
 
 
 def test_message_can_be_created() -> None:
@@ -52,3 +52,17 @@ def test_agent_result_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         result.output = "changed"  # type: ignore[misc]
+
+
+def test_agent_stream_chunk_can_be_created() -> None:
+    chunk = AgentStreamChunk(text="hel", session_id="s1")
+
+    assert chunk.text == "hel"
+    assert chunk.session_id == "s1"
+
+
+def test_agent_stream_chunk_is_immutable() -> None:
+    chunk = AgentStreamChunk(text="hel", session_id="s1")
+
+    with pytest.raises(FrozenInstanceError):
+        chunk.text = "changed"  # type: ignore[misc]

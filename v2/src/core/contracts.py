@@ -27,3 +27,11 @@ class AgentResult:
 
     output: str
     session_id: str
+
+
+@dataclass(frozen=True)
+class AgentStreamChunk:
+    """One text chunk from a streaming agent run."""
+
+    text: str
+    session_id: str
