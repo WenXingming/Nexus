@@ -23,11 +23,23 @@ class FileSessionStore:
 
     def load(self, session_id: str) -> list[Message]:
         raw = (self._root / f"{session_id}.json").read_text(encoding="utf-8")
-        data = json.loads(raw)
-        return [
-            Message(role=item["role"], content=item["content"])
-            for item in data
-        ]
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid session file: {session_id}") from exc
+        if not isinstance(data, list):
+            raise ValueError(f"Invalid session file: {session_id}")
+
+        messages = []
+        for item in data:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("role"), str)
+                or not isinstance(item.get("content"), str)
+            ):
+                raise ValueError(f"Invalid session file: {session_id}")
+            messages.append(Message(role=item["role"], content=item["content"]))
+        return messages
 
     def save(self, session_id: str, messages: list[Message]) -> None:
         data = [

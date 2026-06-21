@@ -116,6 +116,27 @@ def test_load_returns_saved_messages(local_tmp_path) -> None:
     assert store.load(session_id) == messages
 
 
+def test_load_rejects_non_list_session_file(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    (local_tmp_path / f"{session_id}.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"Invalid session file: {session_id}"):
+        store.load(session_id)
+
+
+def test_load_rejects_message_without_role_or_content(local_tmp_path) -> None:
+    store = FileSessionStore(root=local_tmp_path)
+    session_id = store.create()
+    (local_tmp_path / f"{session_id}.json").write_text(
+        json.dumps([{"role": "user"}]),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=f"Invalid session file: {session_id}"):
+        store.load(session_id)
+
+
 def test_load_returns_copy(local_tmp_path) -> None:
     store = FileSessionStore(root=local_tmp_path)
     session_id = store.create()
