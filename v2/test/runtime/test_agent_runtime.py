@@ -2,6 +2,7 @@ from src.core.contracts import AgentRequest, Message
 from src.memory.in_memory_session_store import InMemorySessionStore
 from src.model.fake_client import FakeClient
 from src.runtime.agent_runtime import AgentRuntime
+from src.runtime.config import AgentConfig
 
 
 class RecordingSessionStore:
@@ -103,6 +104,38 @@ def test_run_sends_history_plus_current_user_message_to_model() -> None:
         Message(role="user", content="first"),
         Message(role="assistant", content="ok"),
         Message(role="user", content="second"),
+    ]
+
+
+def test_run_sends_system_prompt_to_model() -> None:
+    model = RecordingModel()
+    runtime = AgentRuntime(
+        model=model,
+        session_store=RecordingSessionStore(),
+        config=AgentConfig(system_prompt="You are Nexus."),
+    )
+
+    runtime.run(AgentRequest(input="hi"))
+
+    assert model.messages == [
+        Message(role="system", content="You are Nexus."),
+        Message(role="user", content="hi"),
+    ]
+
+
+def test_run_does_not_save_system_prompt_to_session() -> None:
+    store = RecordingSessionStore()
+    runtime = AgentRuntime(
+        model=FakeClient(),
+        session_store=store,
+        config=AgentConfig(system_prompt="You are Nexus."),
+    )
+
+    runtime.run(AgentRequest(input="hi"))
+
+    assert store.saved_messages == [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="Echo: hi"),
     ]
 
 
